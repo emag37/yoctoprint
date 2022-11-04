@@ -1,0 +1,17 @@
+[package]
+name = "yoctoprint"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serialport = "4.2.0"
+regex = "1.6.0"
+lazy_static = "1.4.0"
+rocket = "0.5.0-rc.2"
+rocket_contrib = "0.4.10"
+crossbeam = "0.8.2"
+serde = "1.0.147"
+serde_json = "1.0.87"
+dirs = "4.0.0"

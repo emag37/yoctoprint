@@ -1,0 +1,41 @@
+next line: T0
+
+Write cmd: T0
+
+Got response ok
+ after 0.008 secs
+next line: M190 S70
+
+Write cmd: M190 S70
+
+Got response  T:22.62 /0.00 B:23.11 /70.00 @:0 B@:0 W:?
+ after 0.009 secs
+Got response  T:22.54 /0.00 B:23.11 /70.00 @:0 B@:0 W:?
+ after 1.010 secs
+Got response echo:busy: processing
+ T:22.70 /0.00 B:23.11 /70.00 @:0 B@:0 W:?
+ after 2.010 secs
+Got response  T:22.70 /0.00 B:23.11 /70.00 @:0 B@:0 W:?
+ after 3.010 secs
+Got response  T:22.66 /0.00 B:23.11 /70.00 @:0 B@:0 W:?
+echo:busy: processing
+ after 4.011 secs
+Got response  T:22.66 /0.00 B:23.11 /70.00 @:0 B@:127 W:?
+ after 5.012 secs
+Got response  T:22.81 /0.00 B:23.11 /70.00 after 6.009 secs
+Got response  @:0 B@:127 W:?
+echo:busy: processing
+ after 6.020 secs
+Got response  T:22.58 /0.00 B:23.67 /70.00 @:0 B@:127 W:?
+ after 7.012 secs
+Got response  T:22.89 /0.00 B:24.22 /70.00 @:0 B@:127 W:?
+echo:busy: processing
+ after 8.013 secs
+Got response  T:22.81 /0.00 B:24.78 /70.00 @:0 B@:127 W:?
+ after 9.013 secs
+Got response  T:22.77 /0.00 B:25.78 /70.00 @:0 B@:127 W:?
+echo:busy: processing
+ after 10.014 secs
+^C *  Terminal will be reused by tasks, press any key to close it.
+next line: G28 X0 Y0 
+X:0.00 Y:152.00 Z:3.00 E:0.00 Count X:0 Y:12160 Z:6060
