@@ -1,10 +1,11 @@
 use crate::PathBuf;
-use serde::{Serialize, Deserialize};
+use rocket::serde::{Serialize};
+use serde::Deserialize;
  
 #[derive(PartialEq)]
 #[derive(Debug)]
 #[derive(Copy, Clone)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub enum ProbePoint {
     HOTEND,
     BED,
@@ -41,10 +42,10 @@ pub struct Temperature {
 
 #[derive(Debug)]
 #[derive(PartialEq)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Deserialize)]
 pub struct TemperatureTarget {
     pub to_set: ProbePoint,
-    pub index: u32,
+    pub index: Option<u32>,
     pub target: f64
 }
 
@@ -80,7 +81,8 @@ impl Default for PrinterStatus {
 pub enum PrinterCommand {
     Connect(PathBuf, u32),
     Disconnect,
-    StartPrint(PathBuf),
+    SetGcodeFile(PathBuf),
+    StartPrint,
     PausePrint,
     StopPrint,
     GetStatus,

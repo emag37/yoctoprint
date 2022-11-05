@@ -45,11 +45,11 @@ fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::Printe
             return internal_api::PrinterResponse::GenericResult(Ok(()));
 
         },
-        PrinterCommand::StartPrint(gcode) => {
-            return internal_api::PrinterResponse::GenericResult(match printer_ref.set_gcode_file(gcode.clone()) {
-                Ok(()) => {printer_ref.start()}
-                Err(e) => {Err(e)} 
-            });
+        PrinterCommand::SetGcodeFile(path) => {
+            internal_api::PrinterResponse::GenericResult(printer_ref.set_gcode_file(path))
+        },
+        PrinterCommand::StartPrint => {
+            internal_api::PrinterResponse::GenericResult(printer_ref.start())
         },
         PrinterCommand::PausePrint => {
             return internal_api::PrinterResponse::GenericResult(printer_ref.pause());

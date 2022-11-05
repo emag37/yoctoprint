@@ -172,7 +172,7 @@ impl SerialProtocol for Marlin {
         };
 
 
-        let index = format!("T{}",new_t.index);
+        let index = format!("T{}",new_t.index.unwrap_or(0));
         let target = format!("S{}", new_t.target.round() as u32);
         vec![format!("{} {} {}", code, index, target)]
     }

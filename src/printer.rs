@@ -185,11 +185,19 @@ impl Printer {
         return self.state;
     }
     
-    pub fn set_gcode_file(&mut self, file: PathBuf) -> Result<()> {
+    pub fn set_gcode_file(&mut self, file: &PathBuf) -> Result<()> {
         if self.state != PrintState::CONNECTED && self.state != PrintState::DONE {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Cannot set gcode file in this state ({:?})!", self.state)));
         }
-        match file::GCodeFile::new(&file) {
+        let mut abs_path = file.clone();
+        // Accept both with and without base path
+        if !file.starts_with(file::GCODE_DIR) {
+            let mut base = PathBuf::from(file::GCODE_DIR);
+            base.push(file);
+            abs_path = base;
+        }
+
+        match file::GCodeFile::new(&abs_path) {
 
             Ok(f) => {
                 self.to_print = Some(f);

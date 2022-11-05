@@ -11,6 +11,7 @@ regex = "1.6.0"
 lazy_static = "1.4.0"
 crossbeam = "0.8.2"
 dirs = "4.0.0"
+serde = { version = "1.0", features = ["derive"] }
 
 [dependencies.rocket]
 version = "0.5.0-rc.2"
