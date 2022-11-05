@@ -79,7 +79,7 @@ fn init_base_dir() -> std::io::Result<PathBuf> {
     };
     
     base_dir.push(".yoctoprint");
-    match std::fs::create_dir(base_dir) {
+    match std::fs::create_dir(&base_dir) {
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {Ok(base_dir)}
         Err(e) => {Err(e)}
         Ok(()) => {Ok(base_dir)}
@@ -89,7 +89,7 @@ fn init_base_dir() -> std::io::Result<PathBuf> {
 fn init_gcode_dir(base_dir: &PathBuf) -> std::io::Result<PathBuf> {
     let mut gcode_dir = base_dir.clone();
     gcode_dir.push(file::GCODE_DIR);
-    match std::fs::create_dir(gcode_dir) {
+    match std::fs::create_dir(&gcode_dir) {
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {Ok(gcode_dir)}
         Err(e) => {Err(e)}
         Ok(()) => {Ok(gcode_dir)}
@@ -104,14 +104,12 @@ fn main() {
     let (they_send, we_recv) = crossbeam::channel::unbounded();
     let (we_send, they_recv) = crossbeam::channel::unbounded::<PrinterResponse>();
 
+    let base_dir_api = base_dir.clone();
     let api = std::thread::spawn( ||{
-        rest_api::run_api(they_send, they_recv, base_dir.clone());
+        rest_api::run_api(they_send, they_recv, base_dir_api);
     });
     
-    if let Ok(found) = serial::find_printer() {
-        println!("Found printer with capabilities: {:?}", found.fw_info);
-        printer = Printer::new(found);
-    }
+   
     let gcodes : Vec<PathBuf> = file::find_gcode_files(std::path::Path::new("/home/ubuntu/yoctoprint")).unwrap();
 
     println!("Found gcode files: {}", &gcodes.iter().fold(String::new(), |mut ret: String, path| {
@@ -132,6 +130,13 @@ fn main() {
                 cur_printer.print_next_line();
             } else {
                 cur_printer.poll_new_status();
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        } else {
+            if let Ok(found) = serial::find_printer() {
+                println!("Found printer with capabilities: {:?}", found.fw_info);
+                printer = Printer::new(found);
+            } else {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
