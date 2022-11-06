@@ -23,12 +23,21 @@ pub fn find_gcode_files(start_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+// Convert a gcode file into an absolute path if it isn't already.
+pub fn get_abs_gcode_path(base_path: &PathBuf, file: &PathBuf) -> PathBuf {
+    // Accept both with and without base path
+    if !file.is_absolute() {
+        return base_path.join(GCODE_DIR).join(file);
+    }
+    return file.clone();
+}
 
 pub struct GCodeFile {
     pub line_count: u32,
     pub cur_line: u32,
     pub file: BufReader<std::fs::File>,
-    pub path: PathBuf
+    pub path: PathBuf,
+    pub last_line: String
 }
 
 impl GCodeFile {
@@ -43,7 +52,7 @@ impl GCodeFile {
                 }
                 f.rewind().unwrap();
                 
-                Ok(GCodeFile{line_count:n_lines as u32, cur_line: 0, file: BufReader::new(f), path:gcode_file.to_path_buf()})
+                Ok(GCodeFile{line_count:n_lines as u32, cur_line: 0, file: BufReader::new(f), path:gcode_file.to_path_buf(), last_line: String::new()})
             }
         }
     }
@@ -65,7 +74,8 @@ impl GCodeFile {
                     if ret_line.len() == 0 {
                         continue
                     }
-                   
+
+                    self.last_line = ret_line.clone();
                     return Ok(ret_line);}
                 Err(e) => {return Err(e)}
             };

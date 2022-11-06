@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::io::{Error,ErrorKind};
 use crate::printer::Printer;
 use crate::internal_api::*;
@@ -14,12 +14,12 @@ mod printer;
 mod marlin;
 
 
-fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::PrinterCommand) -> internal_api::PrinterResponse{
+fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
     if !matches!(cmd, PrinterCommand::Connect(_,_)) && printer.is_none() {
         return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "No printer connected")));
     }
 
-    let mut printer_ref = printer.as_mut().unwrap();
+    let printer_ref = printer.as_mut().unwrap();
 
     match cmd {
         PrinterCommand::Connect(path, baud)=> {
@@ -46,7 +46,7 @@ fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::Printe
 
         },
         PrinterCommand::SetGcodeFile(path) => {
-            internal_api::PrinterResponse::GenericResult(printer_ref.set_gcode_file(path))
+            internal_api::PrinterResponse::GenericResult(printer_ref.set_gcode_file(&file::get_abs_gcode_path(base_path, path)))
         },
         PrinterCommand::StartPrint => {
             internal_api::PrinterResponse::GenericResult(printer_ref.start())
@@ -122,7 +122,7 @@ fn main() {
 
     loop {
         if let Ok(new_msg) =  we_recv.try_recv() {
-           let resp = handle_incoming_cmd(&mut printer, &new_msg);
+           let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
            we_send.send(resp);
         }
         if let Some(ref mut cur_printer) = printer {

@@ -191,6 +191,10 @@ impl SerialProtocol for Marlin {
     fn get_enable_temperature_updates_cmds(&self, interval: std::time::Duration) -> Vec<String> {
         vec![format!("M155 S{}", interval.as_secs())]
     }
+    
+    fn add_message_frame(&self, line_no: u32, cmd: &str) -> String {
+        format!("N{}{}")
+    }
 }
 
 

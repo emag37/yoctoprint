@@ -48,6 +48,8 @@ pub trait SerialProtocol {
     fn get_set_temperature_cmds(&self, new_t: &TemperatureTarget) -> Vec<String>;
     fn get_move_cmds(&self, new_pos: &Position, cur_pos_mode_az_e: (PositionMode, PositionMode)) -> Vec<String>;
     fn get_enable_temperature_updates_cmds(&self, interval: std::time::Duration) -> Vec<String>;
+    // Adds metadata to a command, e.g: Line number and checksum for Marlin
+    fn add_message_frame(&self, line_no: u32, cmd: &str) -> String;
 }
 
 pub struct PrinterComms {
