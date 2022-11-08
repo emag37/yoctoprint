@@ -18,7 +18,8 @@ pub enum Response {
     BUSY,
     OK,
     TEMPERATURE(Vec<Temperature>, Option<u32>),
-    POSITION(Position)
+    POSITION(Position),
+    NACK(u32)
 }
 
 #[derive(Debug)]
@@ -50,6 +51,7 @@ pub trait SerialProtocol {
     fn get_enable_temperature_updates_cmds(&self, interval: std::time::Duration) -> Vec<String>;
     // Adds metadata to a command, e.g: Line number and checksum for Marlin
     fn add_message_frame(&self, line_no: u32, cmd: &str) -> String;
+    fn get_reset_line_no_cmd(&self, line_no: u32) -> String;
 }
 
 pub struct PrinterComms {
@@ -70,22 +72,6 @@ impl PrinterComms {
                     return Ok(new_port);
                 }
             }
-            /*if let Err(e) = test_port.write("M115\n".as_bytes()) {
-                return Err(e)
-            }
-            //std::thread::sleep(std::time::Duration::from_millis(500));
-
-            if let Ok(n_bytes) = test_port.read(&mut readbuf) {
-                println!("Read {} bytes: {:?}", n_bytes, std::str::from_utf8(&readbuf[0..n_bytes]));
-                if let Ok(response) = std::str::from_utf8(&readbuf[0..n_bytes]) {
-                    if response.contains("FIRMWARE_NAME") {
-                        println!("Got response {} on port {} with baud rate {}",  response, path, baud);
-                        return Ok(PrinterComms{port:test_port});
-                    }
-                }
-            } else {
-                println!("No data to read!");
-            }*/
         }
 
         return Err(std::io::Error::new(

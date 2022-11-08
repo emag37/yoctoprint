@@ -1,10 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::io::{Error,ErrorKind};
 use crate::printer::Printer;
 use crate::internal_api::*;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
-#[macro_use] extern crate crossbeam;
 
 mod serial;
 mod file;
@@ -99,13 +98,13 @@ fn init_gcode_dir(base_dir: &PathBuf) -> std::io::Result<PathBuf> {
 fn main() {
     let mut printer : Option<Printer> = None;
     let base_dir = init_base_dir().unwrap();
-    let gcode_dir = init_gcode_dir(&base_dir).unwrap();
+    init_gcode_dir(&base_dir).unwrap();
 
     let (they_send, we_recv) = crossbeam::channel::unbounded();
     let (we_send, they_recv) = crossbeam::channel::unbounded::<PrinterResponse>();
 
     let base_dir_api = base_dir.clone();
-    let api = std::thread::spawn( ||{
+    let _api = std::thread::spawn( ||{
         rest_api::run_api(they_send, they_recv, base_dir_api);
     });
     
@@ -116,32 +115,25 @@ fn main() {
         ret = ret + path.to_str().unwrap() + ",";
         return ret;
     }));
-    //println!("Let's print {}", gcode[0].display());
-
-    //let mut to_print = file::GCodeFile::new(&gcodes[0]).unwrap();
 
     loop {
-        if let Ok(new_msg) =  we_recv.try_recv() {
+        if let Ok(new_msg) =  we_recv.recv_timeout(std::time::Duration::from_millis(5)) {
            let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
-           we_send.send(resp);
+           we_send.send(resp).expect("Error sending response to external API");
         }
+
         if let Some(ref mut cur_printer) = printer {
             if cur_printer.get_state() == PrintState::STARTED {
                 cur_printer.print_next_line();
             } else {
                 cur_printer.poll_new_status();
-                std::thread::sleep(std::time::Duration::from_millis(10));
             }
         } else {
             if let Ok(found) = serial::find_printer() {
                 println!("Found printer with capabilities: {:?}", found.fw_info);
                 printer = Printer::new(found);
-            } else {
-                std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
     }
 
-   
-    api.join();
 }

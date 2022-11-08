@@ -19,7 +19,7 @@ pub struct Printer {
     temperatures: Vec<Temperature>,
     position: Position,
     move_mode_xyz_e: (PositionMode, PositionMode),
-    state: PrintState
+    state: PrintState,
 }
 
 impl Printer {
@@ -31,7 +31,7 @@ impl Printer {
                 move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE)};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
-                    ret_printer.send_cmd_read_until_response(cmd.as_str());
+                    ret_printer.send_cmd_read_until_response(cmd.as_str(), None);
                 }
                 return Some(ret_printer);
             } else {
@@ -88,8 +88,14 @@ impl Printer {
         self.comms.port.get_mut().write(format!("{}{}", data.trim_end(), '\n').as_bytes())
     }
 
-    fn send_cmd_read_until_response(&mut self, cmd: &str) -> std::io::Result<()> {
-        if let Err(e) = self.send_to_printer(cmd) {
+    fn send_cmd_read_until_response(&mut self, cmd: &str, line_no: Option<u32>) -> std::io::Result<()> {
+        let to_send = 
+        match line_no {
+            Some(no) => {self.protocol.add_message_frame(no, cmd)}
+            None => {cmd.to_string()}
+        };
+
+        if let Err(e) = self.send_to_printer(&to_send) {
             self.transition_state(PrintState::DEAD);
             return Err(e);
         }
@@ -105,10 +111,21 @@ impl Printer {
                         serial::Response::OK => {
                             break;
                         }
+                        serial::Response::NACK(line) => {
+                            if self.to_print.is_none() {
+                                self.transition_state(PrintState::DEAD);
+                                return Err(Error::new(std::io::ErrorKind::InvalidData, format!("The printer is requesting a resend of line {}, but we don't have a loaded GCODE file?", line)));
+                            }
+                            self.to_print.as_mut().unwrap().resend_gcode_line(line);
+                        }
                         _ => {self.update_status_from_response(&resp);}
                     }
                 }
                 Err(e) => {
+                    if e.kind() == std::io::ErrorKind::InvalidData {
+                        println!("Ignoring unparseable line. {}", e);
+                        continue;
+                    }
                     self.transition_state(PrintState::DEAD);
                     return Err(e);
                 }
@@ -122,18 +139,18 @@ impl Printer {
             return Err(Error::new(std::io::ErrorKind::NotFound, format!("Printer is not in {:?} state ({:?})!", PrintState::STARTED, self.state)));
         }
         
-        let next_line = 
+        let (next_line_no, cmd) = 
         match self.to_print.as_mut().unwrap().next_line() {
-            Ok(line) => {line}
+            Ok(line) => {(line.0, line.1.to_owned())}
             Err(e) => {return Err(e);}
         };
 
-        if next_line.len() == 0 {
+        if cmd.len() == 0 {
             self.transition_state(PrintState::DONE);
             return Ok(());
         }
 
-        if let Some(tapped_cmd) = self.protocol.parse_outgoing_cmd(next_line.as_str()) {
+        if let Some(tapped_cmd) = self.protocol.parse_outgoing_cmd(&cmd) {
            match tapped_cmd {
                 OutgoingCmd::PositionModeChange(mode_change) => {
                     match mode_change {
@@ -150,7 +167,7 @@ impl Printer {
             }
         }
 
-        self.send_cmd_read_until_response(next_line.as_str())
+        self.send_cmd_read_until_response(&cmd, Some(next_line_no))
         
     }
 
@@ -176,7 +193,7 @@ impl Printer {
             temperatures: self.temperatures.clone(), 
             position: self.position, 
             gcode_lines_done_total: match &self.to_print {
-                Some(p) => {Some((p.path.clone(), p.cur_line, p.line_count))}
+                Some(p) => {Some((p.path.clone(), p.cur_line_in_file, p.line_count))}
                 None => None
             }})
     }
@@ -194,6 +211,9 @@ impl Printer {
 
             Ok(f) => {
                 self.to_print = Some(f);
+                if let Err(e) = self.send_cmd_read_until_response(self.protocol.get_reset_line_no_cmd(0).as_str(), None){
+                    return Err(e);
+                }
                 Ok(())
             }
             Err(e) => Err(e)
@@ -209,8 +229,11 @@ impl Printer {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("GCode file not loaded.")));
         }
         
-        if self.state == PrintState::DONE && self.to_print.is_some() {
-            self.to_print.as_mut().unwrap().reset();
+        if self.to_print.is_some() && self.to_print.as_ref().unwrap().command_line_no != 0 && self.state != PrintState::PAUSED {
+            let current_gcode_file_path = self.to_print.as_ref().unwrap().path.clone();
+            if let Err(e) = self.set_gcode_file(&current_gcode_file_path) {
+                return Err(e);
+            }
         }
 
         //TODO: Restore position when resuming from pause
@@ -243,7 +266,7 @@ impl Printer {
         }
         
         for cmd in self.protocol.get_home_cmds() {
-            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str()) {
+            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
                 return Err(e);
             }
         }
@@ -266,7 +289,7 @@ impl Printer {
 
         println!("Set position to {:?}", new_pos);
         for cmd in self.protocol.get_move_cmds(new_pos, self.move_mode_xyz_e) {
-            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str()) {
+            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
                 return Err(e);
             }
         }
@@ -281,7 +304,7 @@ impl Printer {
 
         println!("Set temperatures to: {:?}", new_temp);
         for cmd in self.protocol.get_set_temperature_cmds(new_temp) {
-            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str()) {
+            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
                 return Err(e);
             }
         }

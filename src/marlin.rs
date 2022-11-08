@@ -13,6 +13,7 @@ lazy_static! {
     static ref HEATER_POWER_REGEX: Regex = Regex::new(r"([BC]?@[0-9]?):([0-9]+)").unwrap();
     static ref RESIDENCY_REGEX: Regex = Regex::new(r"W:([\?0-9][0-9]*)").unwrap();
     static ref POSITION_REGEX: Regex = Regex::new(r"([XYZE]):(-?[0-9]+\.[0-9]+)").unwrap();
+    static ref LAST_LINE_REGEX: Regex = Regex::new(r"Last Line: ?([0-9]+)").unwrap();
 }
 
 
@@ -136,6 +137,10 @@ impl SerialProtocol for Marlin {
                     Err(e)
                 }
             }
+        } else if let Some(capture) = LAST_LINE_REGEX.captures(trimmed_line) {
+            return Ok(Response::NACK(capture.get(1).unwrap().as_str().parse::<u32>().unwrap() + 1));
+        } else if trimmed_line.starts_with("Resend: ") { // Ignore Resend, we'll use the line number in the previous line
+            return Ok(Response::NONE);
         }
 
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unknown rx line: {}", line)));
@@ -157,6 +162,10 @@ impl SerialProtocol for Marlin {
 
     fn get_home_cmds(&self) -> Vec<String> {
         vec!["M17".to_owned(), "G28".to_owned()]
+    }
+
+    fn get_reset_line_no_cmd(&self, line_no: u32) -> String {
+        return format!("M110 N{}", line_no);
     }
 
     fn get_set_temperature_cmds(&self, new_t: &TemperatureTarget) -> Vec<String> {
@@ -193,7 +202,12 @@ impl SerialProtocol for Marlin {
     }
     
     fn add_message_frame(&self, line_no: u32, cmd: &str) -> String {
-        format!("N{}{}")
+        let mut ret_str = format!("N{} {}", line_no, cmd);
+        let checksum: u8 = ret_str.as_bytes().iter().fold(0 as u8,|acc, x| acc ^ x );
+
+        ret_str.push('*');
+        ret_str.push_str(&checksum.to_string());
+        ret_str
     }
 }
 
@@ -230,6 +244,21 @@ mod tests {
         let test_line = "X:0.13 Y:152.00 Z:3.01 E:-3.95 Count X:0 Y:12160 Z:6060";
         let resp = Marlin{}.parse_rx_line(test_line);
         assert_eq!(resp.unwrap(), Response::POSITION(Position{x: 0.13, y: 152.00, z: 3.01, e: -3.95}));
+    }
+
+    #[test]
+    fn parse_send_error_line() {
+        let test_lines = ["Error:Line Number is not Last Line Number+1, Last Line: 1", "Resend: 2", "ok"];
+        
+        assert_eq!(Marlin{}.parse_rx_line(test_lines[0]).unwrap(), Response::NACK(2));
+        assert_eq!(Marlin{}.parse_rx_line(test_lines[1]).unwrap(), Response::NONE);
+        assert_eq!(Marlin{}.parse_rx_line(test_lines[2]).unwrap(), Response::OK);
+    }
+
+    #[test]
+    fn add_message_frame() {
+        let test_line = "G1 X96.388 Y84.487 E0.04474";
+        assert_eq!( Marlin{}.add_message_frame(1, test_line), "N1 G1 X96.388 Y84.487 E0.04474*107");
     }
 
 }

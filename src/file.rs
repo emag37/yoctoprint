@@ -34,10 +34,12 @@ pub fn get_abs_gcode_path(base_path: &PathBuf, file: &PathBuf) -> PathBuf {
 
 pub struct GCodeFile {
     pub line_count: u32,
-    pub cur_line: u32,
+    pub cur_line_in_file: u32,
     pub file: BufReader<std::fs::File>,
     pub path: PathBuf,
-    pub last_line: String
+    pub last_line: String,
+    pub command_line_no: u32, // Keeps track of lines of actual GCode commands
+    pub resend_last: bool,
 }
 
 impl GCodeFile {
@@ -52,43 +54,61 @@ impl GCodeFile {
                 }
                 f.rewind().unwrap();
                 
-                Ok(GCodeFile{line_count:n_lines as u32, cur_line: 0, file: BufReader::new(f), path:gcode_file.to_path_buf(), last_line: String::new()})
+                Ok(GCodeFile{line_count:n_lines as u32, cur_line_in_file: 0, file: BufReader::new(f), path:gcode_file.to_path_buf(), last_line: String::new(), command_line_no: 0, resend_last:false})
+            }
+        }
+    }
+    
+    pub fn resend_gcode_line(&mut self, gcode_lineno: u32) {
+        // If we NACK the last line, just mark it to be replayed, since we buffered it
+        if self.cur_line_in_file == gcode_lineno {
+            self.resend_last = true;
+        } else {
+            self.file.rewind().expect("Failed to rewind file!");
+            self.cur_line_in_file = 0;
+            self.command_line_no = 0;
+
+            while self.command_line_no < gcode_lineno - 1 {
+                self.next_line().expect("Failed to fetch next line");
             }
         }
     }
 
-    pub fn next_line(&mut self) -> std::io::Result<String> {
+    pub fn next_line(&mut self) -> std::io::Result<(u32, &str)> {
+        if self.resend_last {
+            self.resend_last = false;
+            return Ok((self.command_line_no, &self.last_line));
+        }
+
         let mut ret_line = String::new();
         loop {
             match self.file.read_line(&mut ret_line) {
                 Ok(n_read) => {
                     if n_read == 0 {
                         // EOF
-                        return Ok(ret_line);
+                        return Ok((self.command_line_no, ""));
                     }
                     if let Some(semicolon_pos) = ret_line.find(";") {
                         ret_line.truncate(semicolon_pos);
                     }
 
-                    self.cur_line +=1;
+                    self.cur_line_in_file +=1;
                     if ret_line.len() == 0 {
                         continue
                     }
 
-                    self.last_line = ret_line.clone();
-                    return Ok(ret_line);}
+                    self.last_line = ret_line;
+                    self.command_line_no += 1;
+
+                    return Ok((self.command_line_no, &self.last_line));
+                }
                 Err(e) => {return Err(e)}
             };
         }
     }
 
-    pub fn reset(&mut self) {
-        self.file.rewind().unwrap();
-        self.cur_line = 0;
-    }
-
     pub fn get_progress(&self) -> (u32, u32, f64) {
-        (self.cur_line, self.line_count, ((self.cur_line as f64) / (self.line_count as f64)) * 100.)
+        (self.cur_line_in_file, self.line_count, ((self.cur_line_in_file as f64) / (self.line_count as f64)) * 100.)
     }
 
     pub fn name(&self) -> &str {

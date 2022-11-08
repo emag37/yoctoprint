@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crossbeam::channel::{Sender, Receiver, RecvError};
 use rocket::data::ByteUnit;
-use rocket::{State,Data, Request, Response};
+use rocket::{State,Data, Request};
 use crate::internal_api;
 use crate::file;
 use internal_api::*;
@@ -96,15 +96,15 @@ fn move_rel(comms: &State<InternalComms>, relative_coords : Json<RelativeCoords>
 async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir>) -> Result<(), ApiError> {
     let size_limit: ByteUnit = "50 MB".parse().unwrap();
 
-    let mut fullPath : PathBuf = data_dir.clone().to_path_buf();
-    fullPath.push(file::GCODE_DIR);
-    fullPath.push(filename);
+    let mut full_path : PathBuf = data_dir.clone().to_path_buf();
+    full_path.push(file::GCODE_DIR);
+    full_path.push(filename);
     
-    if std::path::Path::exists(fullPath.as_path()) {
-        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("file already exists @ {:?}", fullPath))));
+    if std::path::Path::exists(full_path.as_path()) {
+        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("file already exists @ {:?}", full_path))));
     }
     let stream = data.open(size_limit);
-    let file = stream.into_file(fullPath.as_path()).await?;
+    let file = stream.into_file(full_path.as_path()).await?;
     
     if !file.is_complete() {
         return Err(ApiError(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Unable to write entire file")));
@@ -176,7 +176,7 @@ fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureT
 
 
 impl<'r> rocket::response::Responder<'r, 'static> for ApiError {
-    fn respond_to(self, request: &Request<'_>) -> rocket::response::Result<'static> {
+    fn respond_to(self, _request: &Request<'_>) -> rocket::response::Result<'static> {
         let error_str = format!("Error: {}\nDescription: {}", self.0.kind(), self.0);
 
         Ok(rocket::Response::build().
