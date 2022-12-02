@@ -188,7 +188,9 @@ impl Printer {
     }
 
     pub fn get_status(&self) -> Result<internal_api::PrinterStatus>{
-        Ok(internal_api::PrinterStatus{ manual_control_enabled: self.can_move_manually, 
+        Ok(internal_api::PrinterStatus{ 
+            connected: true,
+            manual_control_enabled: self.can_move_manually, 
             state: self.state, 
             temperatures: self.temperatures.clone(), 
             position: self.position, 

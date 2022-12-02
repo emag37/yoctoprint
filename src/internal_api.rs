@@ -1,7 +1,14 @@
 use crate::PathBuf;
 use rocket::serde::{Serialize};
 use serde::Deserialize;
- 
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FileInfo {
+    pub last_modified_since_epoch: std::time::Duration,
+    pub path: PathBuf,
+    pub size: u64
+}
+
 #[derive(PartialEq)]
 #[derive(Debug)]
 #[derive(Copy, Clone)]
@@ -64,6 +71,7 @@ pub enum PrintState {
 
 #[derive(Serialize, Debug)]
 pub struct PrinterStatus {
+    pub connected: bool,
     pub manual_control_enabled: bool,
     pub state: PrintState,
     pub temperatures: Vec<Temperature>,
@@ -73,7 +81,7 @@ pub struct PrinterStatus {
 
 impl Default for PrinterStatus {
     fn default() -> PrinterStatus {
-        PrinterStatus { manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default() }
+        PrinterStatus { connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default() }
     }
 }
 

@@ -12,10 +12,47 @@ mod internal_api;
 mod printer;
 mod marlin;
 
-
+#[cfg(feature = "simulated_printer")]
 fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
-    if !matches!(cmd, PrinterCommand::Connect(_,_)) && printer.is_none() {
-        return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "No printer connected")));
+    use std::str::FromStr;
+
+    match cmd {
+        PrinterCommand::GetStatus => {
+            return internal_api::PrinterResponse::Status(
+                Ok(internal_api::PrinterStatus{ 
+                    connected: true,
+                    manual_control_enabled: false, 
+                    state: internal_api::PrintState::CONNECTED, 
+                    temperatures: vec![
+                        internal_api::Temperature{measured_from: internal_api::ProbePoint::HOTEND, index: 0,
+                        power: 128,
+                        current: 75.6,
+                        target: 220.0},
+                        internal_api::Temperature{measured_from: internal_api::ProbePoint::BED, index: 0,
+                            power: 128,
+                            current: 23.4,
+                            target: 70.0}
+                    ], 
+                    position: internal_api::Position{x:10.0, y:1.2, z:20.5, e: 100.0}, 
+                    gcode_lines_done_total: Some((PathBuf::from_str("/home/.yoctoprint/gcode/sheriff_woody.gcode").unwrap(), 102034, 750876))
+                }));
+        },
+        _ => return internal_api::PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "We haven't simulated that yet")))
+    }
+}
+
+#[cfg(not(feature = "simulated_printer"))]
+fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
+    if printer.is_none() {
+        match cmd {
+            PrinterCommand::GetStatus => {
+                return internal_api::PrinterResponse::Status(Ok(internal_api::PrinterStatus::default()))
+            }
+            PrinterCommand::Connect(_,_) => {},
+            _ => {
+                return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "No printer connected")));
+            }
+        }
     }
 
     let printer_ref = printer.as_mut().unwrap();
@@ -108,14 +145,6 @@ fn main() {
         rest_api::run_api(they_send, they_recv, base_dir_api);
     });
     
-   
-    let gcodes : Vec<PathBuf> = file::find_gcode_files(std::path::Path::new("/home/ubuntu/yoctoprint")).unwrap();
-
-    println!("Found gcode files: {}", &gcodes.iter().fold(String::new(), |mut ret: String, path| {
-        ret = ret + path.to_str().unwrap() + ",";
-        return ret;
-    }));
-
     loop {
         if let Ok(new_msg) =  we_recv.recv_timeout(std::time::Duration::from_millis(5)) {
            let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
@@ -134,6 +163,7 @@ fn main() {
                 printer = Printer::new(found);
             }
         }
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
 
 }

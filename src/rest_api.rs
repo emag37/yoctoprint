@@ -9,7 +9,7 @@ use crate::file;
 use internal_api::*;
 use rocket::serde::json::{Json};
 use rocket::serde::{Serialize,Deserialize};
-
+use rocket_cors::CorsOptions;
 struct InternalComms {
     to_internal: Sender<PrinterCommand>,
     from_internal: Receiver<PrinterResponse>
@@ -114,19 +114,26 @@ async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir
 }
 
 #[derive(Debug, Serialize, Clone)]
+struct ApiFileInfo {
+    pub last_modified_secs_since_epoch: u64,
+    pub path: String,
+    pub size: u64
+}
+#[derive(Debug, Serialize, Clone)]
 struct FileList {
-    files: Vec<String>
+    pub files: Vec<ApiFileInfo>
 }
 #[get("/list_gcode")]
 fn list_gcode(data_dir: &State<DataDir>) -> Json<FileList> {
-    let trimmed_files : Vec<String> = file::find_gcode_files(data_dir).unwrap().iter()
+    let api_files : Vec<ApiFileInfo> = file::find_gcode_files(data_dir).unwrap().iter()
     .map(|file| {
-        file.iter()
-        .skip_while(|component| data_dir.iter().any(|dc| dc == *component))
-        .collect::<PathBuf>().to_str().unwrap().to_owned()
+        ApiFileInfo{path:
+        file.path.file_name().unwrap().to_str().unwrap().to_string(),
+        size: file.size,
+        last_modified_secs_since_epoch: file.last_modified_since_epoch.as_secs()}
     }).collect();
 
-    return Json(FileList{files:trimmed_files});
+    return Json(FileList{files:api_files});
 }
 
 #[post("/set_gcode?<filename>")]
@@ -188,11 +195,15 @@ impl<'r> rocket::response::Responder<'r, 'static> for ApiError {
 }
 
 pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<PrinterResponse>, data_dir: PathBuf) {
+    let cors = CorsOptions::default().to_cors().unwrap();
+
     let api_rocket = rocket::build()
     .mount("/api", routes![status, home, move_rel, upload_gcode, list_gcode, set_gcode, start_print, stop_print, pause_print, set_temperature])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
-    .manage(data_dir as DataDir);
+    .manage(data_dir as DataDir)
+    .attach(cors);
 
+    
     return rocket::execute(async move {
         api_rocket.launch().await;
     });

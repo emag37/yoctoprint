@@ -3,6 +3,8 @@ name = "yoctoprint"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+simulated_printer = []
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -12,6 +14,7 @@ lazy_static = "1.4.0"
 crossbeam = "0.8.2"
 dirs = "4.0.0"
 serde = { version = "1.0", features = ["derive"] }
+rocket_cors = { git = "https://github.com/lawliet89/rocket_cors", branch = "master" }
 
 [dependencies.rocket]
 version = "0.5.0-rc.2"

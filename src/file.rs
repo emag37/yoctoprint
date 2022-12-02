@@ -1,13 +1,15 @@
 use std::io::{BufReader, BufRead, Seek, Read};
 use std::vec::Vec;
 use std::path::{Path,PathBuf};
-use std::fs::File;
+use std::fs::{File};
+
+use crate::internal_api::{self, FileInfo};
 
 pub const GCODE_DIR: &str = "gcode";
 
 // Find all gcode files recursively starting from start_dir
-pub fn find_gcode_files(start_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut files : Vec<PathBuf> = Vec::new();
+pub fn find_gcode_files(start_dir: &Path) -> std::io::Result<Vec<internal_api::FileInfo>> {
+    let mut files : Vec<internal_api::FileInfo> = Vec::new();
 
     if start_dir.is_dir() {
         for entry in std::fs::read_dir(start_dir)? {
@@ -16,7 +18,11 @@ pub fn find_gcode_files(start_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
             if path.is_dir() {
                 files.append(&mut find_gcode_files(&path)?);
             } else if path.extension().is_some() && path.extension().unwrap().eq_ignore_ascii_case("gcode") {
-                files.push(path);
+                let metadata = std::fs::metadata(&path).unwrap();
+                files.push(FileInfo{path: path, size: metadata.len(), last_modified_since_epoch: metadata.modified()
+                    .unwrap_or(std::time::UNIX_EPOCH)
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()});
             }
         }
     }
