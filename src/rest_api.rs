@@ -116,7 +116,7 @@ async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir
 #[derive(Debug, Serialize, Clone)]
 struct ApiFileInfo {
     pub last_modified_secs_since_epoch: u64,
-    pub path: String,
+    pub name: String,
     pub size: u64
 }
 #[derive(Debug, Serialize, Clone)]
@@ -127,7 +127,7 @@ struct FileList {
 fn list_gcode(data_dir: &State<DataDir>) -> Json<FileList> {
     let api_files : Vec<ApiFileInfo> = file::find_gcode_files(data_dir).unwrap().iter()
     .map(|file| {
-        ApiFileInfo{path:
+        ApiFileInfo{name:
         file.path.file_name().unwrap().to_str().unwrap().to_string(),
         size: file.size,
         last_modified_secs_since_epoch: file.last_modified_since_epoch.as_secs()}
@@ -139,6 +139,15 @@ fn list_gcode(data_dir: &State<DataDir>) -> Json<FileList> {
 #[post("/set_gcode?<filename>")]
 fn set_gcode(comms: &State<InternalComms>, filename: String) -> Result<(), ApiError> {
     if let Err(e) = comms.to_internal.send(PrinterCommand::SetGcodeFile(PathBuf::from(filename))) {
+        return Err(crossbeam_err_to_io_err(e));
+    }
+
+    resp_generic_result_or_err(comms.from_internal.recv())
+}
+
+#[delete("/delete_gcode?<filename>")]
+fn delete_gcode(comms: &State<InternalComms>, filename: String) -> Result<(), ApiError> {
+    if let Err(e) = comms.to_internal.send(PrinterCommand::DeleteGcodeFile(PathBuf::from(filename))) {
         return Err(crossbeam_err_to_io_err(e));
     }
 
@@ -184,7 +193,7 @@ fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureT
 
 impl<'r> rocket::response::Responder<'r, 'static> for ApiError {
     fn respond_to(self, _request: &Request<'_>) -> rocket::response::Result<'static> {
-        let error_str = format!("Error: {}\nDescription: {}", self.0.kind(), self.0);
+        let error_str = format!("Error: {:?}\nDescription: {:?}", self.0.kind(), self.0);
 
         Ok(rocket::Response::build().
         header(rocket::http::ContentType::HTML).
@@ -198,7 +207,7 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
     let cors = CorsOptions::default().to_cors().unwrap();
 
     let api_rocket = rocket::build()
-    .mount("/api", routes![status, home, move_rel, upload_gcode, list_gcode, set_gcode, start_print, stop_print, pause_print, set_temperature])
+    .mount("/api", routes![status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
     .manage(data_dir as DataDir)
     .attach(cors);

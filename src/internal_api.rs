@@ -69,14 +69,14 @@ pub enum PrintState {
     DEAD
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct PrinterStatus {
     pub connected: bool,
     pub manual_control_enabled: bool,
     pub state: PrintState,
     pub temperatures: Vec<Temperature>,
     pub position: Position,
-    pub gcode_lines_done_total: Option<(PathBuf, u32, u32)>,
+    pub gcode_lines_done_total: Option<(String, u32, u32)>,
 }
 
 impl Default for PrinterStatus {
@@ -90,6 +90,7 @@ pub enum PrinterCommand {
     Connect(PathBuf, u32),
     Disconnect,
     SetGcodeFile(PathBuf),
+    DeleteGcodeFile(PathBuf),
     StartPrint,
     PausePrint,
     StopPrint,

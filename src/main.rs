@@ -2,6 +2,8 @@ use std::path::{PathBuf};
 use std::io::{Error,ErrorKind};
 use crate::printer::Printer;
 use crate::internal_api::*;
+#[cfg(feature = "simulated_printer")]
+use rand;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
 
@@ -12,30 +14,23 @@ mod internal_api;
 mod printer;
 mod marlin;
 
+
 #[cfg(feature = "simulated_printer")]
-fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
+fn handle_incoming_cmd(cur_status : &mut internal_api::PrinterStatus, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
     use std::str::FromStr;
 
     match cmd {
         PrinterCommand::GetStatus => {
-            return internal_api::PrinterResponse::Status(
-                Ok(internal_api::PrinterStatus{ 
-                    connected: true,
-                    manual_control_enabled: false, 
-                    state: internal_api::PrintState::CONNECTED, 
-                    temperatures: vec![
-                        internal_api::Temperature{measured_from: internal_api::ProbePoint::HOTEND, index: 0,
-                        power: 128,
-                        current: 75.6,
-                        target: 220.0},
-                        internal_api::Temperature{measured_from: internal_api::ProbePoint::BED, index: 0,
-                            power: 128,
-                            current: 23.4,
-                            target: 70.0}
-                    ], 
-                    position: internal_api::Position{x:10.0, y:1.2, z:20.5, e: 100.0}, 
-                    gcode_lines_done_total: Some((PathBuf::from_str("/home/.yoctoprint/gcode/sheriff_woody.gcode").unwrap(), 102034, 750876))
-                }));
+            return internal_api::PrinterResponse::Status(Ok(cur_status.clone()));
+        },
+        PrinterCommand::DeleteGcodeFile(path) => {
+            internal_api::PrinterResponse::GenericResult(std::fs::remove_file(file::get_abs_gcode_path(base_path, path)))
+        },
+        PrinterCommand::SetGcodeFile(path) => {
+            let total_lines = rand::random::<u32>() % 500000;
+            let cur_line = rand::random::<u32>() % total_lines;
+            cur_status.gcode_lines_done_total = Some((path.to_str().unwrap().to_string(), cur_line, total_lines));
+            internal_api::PrinterResponse::GenericResult(Ok(()))
         },
         _ => return internal_api::PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "We haven't simulated that yet")))
     }
@@ -83,6 +78,9 @@ fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::Printe
         },
         PrinterCommand::SetGcodeFile(path) => {
             internal_api::PrinterResponse::GenericResult(printer_ref.set_gcode_file(&file::get_abs_gcode_path(base_path, path)))
+        },
+        PrinterCommand::DeleteGcodeFile(path) => {
+            internal_api::PrinterResponse::GenericResult(std::fs::remove_file(file::get_abs_gcode_path(base_path, path)))
         },
         PrinterCommand::StartPrint => {
             internal_api::PrinterResponse::GenericResult(printer_ref.start())
@@ -133,6 +131,25 @@ fn init_gcode_dir(base_dir: &PathBuf) -> std::io::Result<PathBuf> {
 }
 
 fn main() {
+    #[cfg(feature = "simulated_printer")]
+    let mut sim_status = internal_api::PrinterStatus{ 
+        connected: true,
+        manual_control_enabled: false, 
+        state: internal_api::PrintState::CONNECTED, 
+        temperatures: vec![
+            internal_api::Temperature{measured_from: internal_api::ProbePoint::HOTEND, index: 0,
+            power: 128,
+            current: 75.6,
+            target: 220.0},
+            internal_api::Temperature{measured_from: internal_api::ProbePoint::BED, index: 0,
+                power: 128,
+                current: 23.4,
+                target: 70.0}
+        ], 
+        position: internal_api::Position{x:10.0, y:1.2, z:20.5, e: 100.0}, 
+        gcode_lines_done_total: Some(("sheriff_woody.gcode".to_string(), 102034, 750876))
+    };
+
     let mut printer : Option<Printer> = None;
     let base_dir = init_base_dir().unwrap();
     init_gcode_dir(&base_dir).unwrap();
@@ -147,8 +164,12 @@ fn main() {
     
     loop {
         if let Ok(new_msg) =  we_recv.recv_timeout(std::time::Duration::from_millis(5)) {
-           let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
-           we_send.send(resp).expect("Error sending response to external API");
+            #[cfg(feature = "simulated_printer")]
+            let resp = handle_incoming_cmd(&mut sim_status, &new_msg, &base_dir);
+            #[cfg(not(feature = "simulated_printer"))]
+            let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
+
+            we_send.send(resp).expect("Error sending response to external API");
         }
 
         if let Some(ref mut cur_printer) = printer {

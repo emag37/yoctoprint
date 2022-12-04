@@ -1,12 +1,15 @@
 <script>
-  import svelteLogo from './assets/svelte.svg'
   import Counter from './lib/Counter.svelte'
   import Temperature from './lib/Temperature.svelte';
+  import Files from './lib/Files.svelte';
 </script>
 
 <main>
   <div class="card">
     <Temperature />
+  </div>
+  <div class="card">
+    <Files />
   </div>
 </main>
 

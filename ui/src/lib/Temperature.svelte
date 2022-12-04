@@ -2,17 +2,6 @@
     import { status } from "../data";
     import { onDestroy } from 'svelte';
 
-const MAX_TEMP = 300
-const MAX_POWER = 128
-
-const probe_point = {
-    hotend: "HOTEND",
-    bed : "BED",
-    chamber: "CHAMBER",
-    probe: "PROBE",
-    cooler: "COOLER",
-    other: "OTHER"
-}
 let temperatures = []
 
 const unsubscribe = status.subscribe(new_status => {
@@ -31,7 +20,7 @@ onDestroy(unsubscribe);
 
 </script>
 
-{#each temperatures as temperature, idx}
+{#each temperatures as temperature}
 <div class="readout">
     <div class="probe">{temperature.measured_from +  " " + temperature.index}</div>
     <div class="sensor">

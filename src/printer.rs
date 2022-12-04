@@ -195,7 +195,7 @@ impl Printer {
             temperatures: self.temperatures.clone(), 
             position: self.position, 
             gcode_lines_done_total: match &self.to_print {
-                Some(p) => {Some((p.path.clone(), p.cur_line_in_file, p.line_count))}
+                Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
             }})
     }
