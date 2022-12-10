@@ -3,7 +3,9 @@ use regex::Regex;
 use serialport::SerialPort;
 use std::io::*;
 use crate::internal_api;
+use enumset::{EnumSet, EnumSetType};
 use internal_api::*;
+use std::collections::HashSet;
 
 #[derive(Copy, Clone)]
 pub enum CommandSpeed {
@@ -45,7 +47,7 @@ pub enum OutgoingCmd {
 pub trait SerialProtocol {
     fn parse_rx_line(&self, in_str: &str) -> std::io::Result<Response>;
     fn parse_outgoing_cmd(&self, out_cmd: &str) -> Option<OutgoingCmd>;
-    fn get_home_cmds(&self) -> Vec<String>;
+    fn get_home_cmds(&self, axes : &EnumSet<internal_api::Axis>) -> Vec<String>;
     fn get_set_temperature_cmds(&self, new_t: &TemperatureTarget) -> Vec<String>;
     fn get_move_cmds(&self, new_pos: &Position, cur_pos_mode_az_e: (PositionMode, PositionMode)) -> Vec<String>;
     fn get_enable_temperature_updates_cmds(&self, interval: std::time::Duration) -> Vec<String>;

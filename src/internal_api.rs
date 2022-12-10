@@ -1,6 +1,7 @@
 use crate::PathBuf;
 use rocket::serde::{Serialize};
 use serde::Deserialize;
+use enumset::{EnumSetType, EnumSet};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileInfo {
@@ -21,6 +22,15 @@ pub enum ProbePoint {
     COOLER,
     REDUNDANT,
     UNKNOWN
+}
+
+
+#[derive(EnumSetType, Debug)]
+pub enum Axis {
+    X,
+    Y,
+    Z,
+    E
 }
 
 #[derive(Debug)]
@@ -96,7 +106,7 @@ pub enum PrinterCommand {
     StopPrint,
     GetStatus,
     ManualMove(Position),
-    Home,
+    Home(EnumSet<Axis>),
     SetTemperature(TemperatureTarget)
 }
 

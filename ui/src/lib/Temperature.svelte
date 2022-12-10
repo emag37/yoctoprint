@@ -38,11 +38,14 @@ onDestroy(unsubscribe);
 
 <style>
 .readout {
+    display: flex;
+    flex-direction: column;
     padding-bottom: 5px;
+    flex-wrap: wrap;
 }
 .sensor {
     display: grid;
-    width: auto;
+    width: max-content;
     clear: both;
     padding: 5px;
     border-style: solid;
@@ -52,11 +55,12 @@ onDestroy(unsubscribe);
 }
 
 .probe {
-    float:left;
+    max-width: fit-content;
+    text-align: left;
     border-width: 1px;
     border-style: solid;
     border-color: gray;
-    padding:3px;
+    padding:5px;
     border-radius: 5px;
 }
 .digital {
@@ -73,14 +77,6 @@ onDestroy(unsubscribe);
   background: none;
   padding-top: 1px;
   padding-bottom: 1px;
-}
-
-.yellow {
-  background-color: #efe300;
-}
-
-.orange{
-  background-color: #ef8300;
 }
 
 </style>

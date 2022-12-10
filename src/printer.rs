@@ -1,3 +1,4 @@
+use crate::internal_api::Axis;
 use crate::internal_api::Position;
 use crate::internal_api::Temperature;
 use crate::internal_api::TemperatureTarget;
@@ -10,12 +11,13 @@ use internal_api::PrintState;
 use std::io::Error;
 use std::io::{BufRead,Result};
 use std::path::PathBuf;
+use enumset::{EnumSet,enum_set};
 
 pub struct Printer {
     pub comms: serial::PrinterComms,
     pub protocol: Box<dyn SerialProtocol>,
     to_print: Option<file::GCodeFile>,
-    can_move_manually: bool,
+    homed_axes: EnumSet<Axis>,
     temperatures: Vec<Temperature>,
     position: Position,
     move_mode_xyz_e: (PositionMode, PositionMode),
@@ -27,7 +29,7 @@ impl Printer {
         if let Some(fw) = comms.fw_info.get("FIRMWARE_NAME") {
             if fw.to_lowercase().contains("marlin") {
                 let mut ret_printer = Printer{comms, protocol:Box::new(marlin::Marlin{}), to_print: None, state: PrintState::CONNECTED,
-                can_move_manually:false, temperatures: Vec::new(), position: Position::default(),
+                homed_axes:EnumSet::new(), temperatures: Vec::new(), position: Position::default(),
                 move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE)};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
@@ -48,7 +50,7 @@ impl Printer {
             return true;
         }
         println!("Printer state transition: {:?} -> {:?}", self.state, new_state);
-        self.can_move_manually = false;
+        self.homed_axes = EnumSet::new();
         return true;
     }
 
@@ -187,10 +189,14 @@ impl Printer {
         }
     }
 
+    fn can_move_manually(&self) -> bool {
+        self.homed_axes.is_superset(enum_set!(Axis::X | Axis::Y | Axis::Z))
+    }
+
     pub fn get_status(&self) -> Result<internal_api::PrinterStatus>{
         Ok(internal_api::PrinterStatus{ 
             connected: true,
-            manual_control_enabled: self.can_move_manually, 
+            manual_control_enabled: self.can_move_manually(), 
             state: self.state, 
             temperatures: self.temperatures.clone(), 
             position: self.position, 
@@ -262,12 +268,12 @@ impl Printer {
         Ok(())
     }
 
-    pub fn go_home(&mut self) -> Result<()> {
+    pub fn go_home(&mut self, axes: &EnumSet<Axis>) -> Result<()> {
         if !matches!(self.state, PrintState::CONNECTED |  PrintState::DONE | PrintState::PAUSED) {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be homed from this state ({:?})!", self.state)));
         }
         
-        for cmd in self.protocol.get_home_cmds() {
+        for cmd in self.protocol.get_home_cmds(&axes) {
             if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
                 return Err(e);
             }
@@ -276,7 +282,7 @@ impl Printer {
         if self.state == PrintState::DONE {
             self.transition_state(PrintState::CONNECTED);
         }
-        self.can_move_manually = true;
+        self.homed_axes |= *axes;
         
         Ok(())
     }
@@ -285,7 +291,7 @@ impl Printer {
         if !matches!(self.state, PrintState::CONNECTED |  PrintState::DONE | PrintState::PAUSED) {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be moved from this state ({:?})!", self.state)));
         }
-        if !self.can_move_manually {
+        if !self.can_move_manually() {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, "Printer cannot be moved manually, home it first?"));
         }
 

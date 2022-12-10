@@ -10,6 +10,8 @@ use internal_api::*;
 use rocket::serde::json::{Json};
 use rocket::serde::{Serialize,Deserialize};
 use rocket_cors::CorsOptions;
+use enumset::EnumSet;
+
 struct InternalComms {
     to_internal: Sender<PrinterCommand>,
     from_internal: Receiver<PrinterResponse>
@@ -62,9 +64,26 @@ fn status(comms: &State<InternalComms>) -> Result<Json<PrinterStatus>, ApiError>
     }
 }
 
-#[post("/home")]
-fn home(comms: &State<InternalComms>) -> Result<(), ApiError> {
-    if let Err(e) = comms.to_internal.send(PrinterCommand::Home) {
+#[derive(Debug, Deserialize, Clone)]
+struct HomeAxes {
+    pub axes : Vec<String>
+}
+
+#[post("/home", format = "application/json", data = "<home_axes>")]
+fn home(comms: &State<InternalComms>, home_axes : Json<HomeAxes>) -> Result<(), ApiError> {
+    let mut internal_axes : EnumSet<internal_api::Axis> = EnumSet::new();
+
+    for axis in home_axes.axes.iter() {
+        match axis.to_uppercase().trim() {
+            "X" => {internal_axes |= internal_api::Axis::X},
+            "Y" => {internal_axes |= internal_api::Axis::Y},
+            "Z" => {internal_axes |= internal_api::Axis::Z},
+            "ALL" => {internal_axes |= internal_api::Axis::X | internal_api::Axis::Y | internal_api::Axis::Z},
+            _ => {}
+        }
+    }
+
+    if let Err(e) = comms.to_internal.send(PrinterCommand::Home(internal_axes)) {
         return Err(crossbeam_err_to_io_err(e));
     }
     

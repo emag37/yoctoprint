@@ -1,10 +1,17 @@
 <script>
-  import Counter from './lib/Counter.svelte'
+  import Control from './lib/Control.svelte'
   import Temperature from './lib/Temperature.svelte';
   import Files from './lib/Files.svelte';
+  import PrintJob from './lib/PrintJob.svelte';
 </script>
 
 <main>
+  <div class="card">
+    <PrintJob />
+  </div>
+  <div class="card">
+    <Control />
+  </div>
   <div class="card">
     <Temperature />
   </div>

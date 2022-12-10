@@ -24,12 +24,49 @@ fn handle_incoming_cmd(cur_status : &mut internal_api::PrinterStatus, cmd: &inte
             return internal_api::PrinterResponse::Status(Ok(cur_status.clone()));
         },
         PrinterCommand::DeleteGcodeFile(path) => {
+            println!("Delete path: {:?}", file::get_abs_gcode_path(base_path, path));
             internal_api::PrinterResponse::GenericResult(std::fs::remove_file(file::get_abs_gcode_path(base_path, path)))
         },
         PrinterCommand::SetGcodeFile(path) => {
             let total_lines = rand::random::<u32>() % 500000;
             let cur_line = rand::random::<u32>() % total_lines;
             cur_status.gcode_lines_done_total = Some((path.to_str().unwrap().to_string(), cur_line, total_lines));
+            internal_api::PrinterResponse::GenericResult(Ok(()))
+        },
+        PrinterCommand::Home(axes) => {
+            println!("Homing: {:?}", axes);
+            std::thread::sleep_ms(3000);
+            cur_status.manual_control_enabled = true;
+            internal_api::PrinterResponse::GenericResult(Ok(()))
+        },
+        PrinterCommand::ManualMove(pos) => {
+            println!("Move: {:?}", pos);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            internal_api::PrinterResponse::GenericResult(Ok(()))
+        },
+        PrinterCommand::SetTemperature(temp) => {
+            println!("Set temperature: {:?}", temp);
+            for cur_temp in &mut cur_status.temperatures {
+                if cur_temp.measured_from == temp.to_set && ((temp.index.is_some() && cur_temp.index == temp.index.unwrap()) || temp.index.is_none()) {
+                    cur_temp.target = temp.target;
+                }
+            }
+            internal_api::PrinterResponse::GenericResult(Ok(()))
+        },
+        PrinterCommand::StopPrint => {
+            println!("Stopping the print!");
+            cur_status.state = internal_api::PrintState::CONNECTED;
+            cur_status.gcode_lines_done_total = None;
+            internal_api::PrinterResponse::GenericResult(Ok(()))
+        },
+        PrinterCommand::PausePrint => {
+            println!("Pausing the print!");
+            cur_status.state = internal_api::PrintState::PAUSED;
+            internal_api::PrinterResponse::GenericResult(Ok(()))
+        },
+        PrinterCommand::StartPrint => {
+            println!("Starting the print!");
+            cur_status.state = internal_api::PrintState::STARTED;
             internal_api::PrinterResponse::GenericResult(Ok(()))
         },
         _ => return internal_api::PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "We haven't simulated that yet")))
@@ -100,8 +137,8 @@ fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::Printe
         PrinterCommand::SetTemperature(new_temp) => {
             return internal_api::PrinterResponse::GenericResult(printer_ref.set_temperature(new_temp));
         },
-        PrinterCommand::Home => {
-            return internal_api::PrinterResponse::GenericResult(printer_ref.go_home());
+        PrinterCommand::Home(axes) => {
+            return internal_api::PrinterResponse::GenericResult(printer_ref.go_home(axes));
         },
     }
 }
@@ -135,7 +172,7 @@ fn main() {
     let mut sim_status = internal_api::PrinterStatus{ 
         connected: true,
         manual_control_enabled: false, 
-        state: internal_api::PrintState::CONNECTED, 
+        state: internal_api::PrintState::STARTED, 
         temperatures: vec![
             internal_api::Temperature{measured_from: internal_api::ProbePoint::HOTEND, index: 0,
             power: 128,

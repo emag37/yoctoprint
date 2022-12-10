@@ -5,6 +5,7 @@ use crate::internal_api;
 use crate::serial::*;
 use internal_api::*;
 use std::io::*;
+use enumset::EnumSet;
 
 lazy_static! {
     // Matches T:22.81 /0.00. Current in group 1, target in group 2
@@ -159,9 +160,22 @@ impl SerialProtocol for Marlin {
             None
         }
     }
+    
+    fn get_home_cmds(&self, axes : &EnumSet<internal_api::Axis>) -> Vec<String> {
+        let mut home_cmd = "G28 ".to_owned();
+        
+        for axis in axes.iter(){
+            match axis {
+                Axis::X => home_cmd.push_str("X "),
+                Axis::Y => home_cmd.push_str("Y "),
+                Axis::Z => home_cmd.push_str("Z "),
+                _ => {}
+            };
+        };
 
-    fn get_home_cmds(&self) -> Vec<String> {
-        vec!["M17".to_owned(), "G28".to_owned()]
+        home_cmd.pop();
+        
+        vec!["M17".to_owned(), home_cmd]
     }
 
     fn get_reset_line_no_cmd(&self, line_no: u32) -> String {
@@ -259,6 +273,13 @@ mod tests {
     fn add_message_frame() {
         let test_line = "G1 X96.388 Y84.487 E0.04474";
         assert_eq!( Marlin{}.add_message_frame(1, test_line), "N1 G1 X96.388 Y84.487 E0.04474*107");
+    }
+
+    #[test]
+    fn home_cmds() {
+        assert_eq!(Marlin{}.get_home_cmds(&(Axis::X | Axis::Y | Axis::Z))[1], "G28 X Y Z");
+        assert_eq!(Marlin{}.get_home_cmds(&(Axis::Y | Axis::Z))[1], "G28 Y Z");
+        assert_eq!(Marlin{}.get_home_cmds(&(Axis::Y | Axis::Z | Axis::E))[1], "G28 Y Z");
     }
 
 }
