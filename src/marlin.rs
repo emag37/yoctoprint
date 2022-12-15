@@ -182,6 +182,10 @@ impl SerialProtocol for Marlin {
         return format!("M110 N{}", line_no);
     }
 
+    fn get_stop_cmd(&self, emergency: bool) -> String {
+        if emergency {"M112".to_string()}  else {"M108".to_string()}
+    }
+
     fn get_set_temperature_cmds(&self, new_t: &TemperatureTarget) -> Vec<String> {
         let code = match new_t.to_set {
             ProbePoint::HOTEND => {"M104"}
@@ -222,6 +226,14 @@ impl SerialProtocol for Marlin {
         ret_str.push('*');
         ret_str.push_str(&checksum.to_string());
         ret_str
+    }
+
+    fn get_fan_speed_cmd(&self, index:u32, speed: f64) -> String {
+        if speed <= 0. {
+            format!("M107 P{}", index).to_string()
+        } else {
+            format!("M106 P{} S{}", index, std::cmp::min((speed * 255.) as u32, 255)).to_string()
+        }
     }
 }
 
@@ -273,6 +285,13 @@ mod tests {
     fn add_message_frame() {
         let test_line = "G1 X96.388 Y84.487 E0.04474";
         assert_eq!( Marlin{}.add_message_frame(1, test_line), "N1 G1 X96.388 Y84.487 E0.04474*107");
+    }
+
+    #[test]
+    fn parse_busy_line() {
+        let test_line = "echo:busy: processing";
+        let resp = Marlin{}.parse_rx_line(test_line);
+        assert_eq!(resp.unwrap(), Response::BUSY);
     }
 
     #[test]

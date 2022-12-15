@@ -14,7 +14,8 @@ let step_input = 2;
 let current_feed = 10;
 
 let request_active = false;
-let controls_disabled = $status.manual_control_enabled === false;
+let controls_disabled
+$: controls_disabled = $status.manual_control_enabled === false;
 let desired_temperatures = {}
 
 onMount(initTemperatures);

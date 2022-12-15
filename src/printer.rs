@@ -22,6 +22,7 @@ pub struct Printer {
     position: Position,
     move_mode_xyz_e: (PositionMode, PositionMode),
     state: PrintState,
+    is_busy: bool
 }
 
 impl Printer {
@@ -30,7 +31,7 @@ impl Printer {
             if fw.to_lowercase().contains("marlin") {
                 let mut ret_printer = Printer{comms, protocol:Box::new(marlin::Marlin{}), to_print: None, state: PrintState::CONNECTED,
                 homed_axes:EnumSet::new(), temperatures: Vec::new(), position: Position::default(),
-                move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE)};
+                move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     ret_printer.send_cmd_read_until_response(cmd.as_str(), None);
@@ -51,6 +52,7 @@ impl Printer {
         }
         println!("Printer state transition: {:?} -> {:?}", self.state, new_state);
         self.homed_axes = EnumSet::new();
+        self.state = new_state;
         return true;
     }
 
@@ -106,14 +108,20 @@ impl Printer {
             match self.read_from_printer() {
                 Ok(resp) => {
                     match resp {
-                        serial::Response::NONE | serial::Response::BUSY => {
+                        serial::Response::NONE => {
                             std::thread::sleep(std::time::Duration::from_millis(5));
                             continue;
                         }
+                        serial::Response::BUSY => {
+                            self.is_busy = true;
+                            break;
+                        }
                         serial::Response::OK => {
+                            self.is_busy = false;
                             break;
                         }
                         serial::Response::NACK(line) => {
+                            self.is_busy = false;
                             if self.to_print.is_none() {
                                 self.transition_state(PrintState::DEAD);
                                 return Err(Error::new(std::io::ErrorKind::InvalidData, format!("The printer is requesting a resend of line {}, but we don't have a loaded GCODE file?", line)));
@@ -137,6 +145,10 @@ impl Printer {
     }
 
     pub fn print_next_line(&mut self) -> std::io::Result<()> {
+        if self.is_busy {
+            self.poll_new_status();
+            return Ok(())
+        }
         if self.state != PrintState::STARTED {
             return Err(Error::new(std::io::ErrorKind::NotFound, format!("Printer is not in {:?} state ({:?})!", PrintState::STARTED, self.state)));
         }
@@ -178,6 +190,14 @@ impl Printer {
             match self.read_from_printer() {
                 Ok(resp) => {
                     match resp {
+                        serial::Response::BUSY => {
+                            self.is_busy = true;
+                            break;
+                        }
+                        serial::Response::OK => {
+                            self.is_busy = false;
+                            break;
+                        }
                         serial::Response::NONE => {break;}
                         _ => {self.update_status_from_response(&resp);}
                     }
@@ -191,6 +211,17 @@ impl Printer {
 
     fn can_move_manually(&self) -> bool {
         self.homed_axes.is_superset(enum_set!(Axis::X | Axis::Y | Axis::Z))
+    }
+    
+    fn disable_all_heaters(&mut self) {
+        let cmds = self.temperatures.iter().map(|t| {
+            self.protocol.get_set_temperature_cmds(&TemperatureTarget { to_set: t.measured_from, index: Some(t.index), target: 0. })
+        }).flatten().collect::<Vec<String>>();
+
+        for cmd in cmds {
+            self.send_cmd_read_until_response(cmd.as_str(), None);
+        }
+       
     }
 
     pub fn get_status(&self) -> Result<internal_api::PrinterStatus>{
@@ -253,7 +284,12 @@ impl Printer {
         if self.state != PrintState::STARTED && self.state != PrintState::DONE && self.state != PrintState::PAUSED {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be stopped from this state ({:?})!", self.state)));
         }
-
+        
+        if self.is_busy {
+            self.send_cmd_read_until_response(self.protocol.get_stop_cmd(false).as_str(), None);
+        }
+        self.send_cmd_read_until_response(self.protocol.get_fan_speed_cmd(0, 0.).as_str(), None);
+        self.disable_all_heaters();
         self.transition_state(PrintState::CONNECTED);
         Ok(())
     }

@@ -103,7 +103,7 @@ impl GCodeFile {
                         continue
                     }
 
-                    self.last_line = ret_line;
+                    self.last_line = ret_line.trim_end().to_string();
                     self.command_line_no += 1;
 
                     return Ok((self.command_line_no, &self.last_line));

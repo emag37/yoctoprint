@@ -57,6 +57,7 @@
     }
 
     function selectFile(filename) {
+        filename = `${filename}.gcode`
         fetch(api_url() + `set_gcode?filename=${filename}`, {method: "POST"})
         .then(resp => {
             if(!resp.ok)
@@ -135,7 +136,7 @@
                 <button class="button" disabled={$status.state != "CONNECTED"} title="Erase this G-Code file" on:click={() => {deleteFile(file.name);}}>
                     <img src={shredderIcon} width="20" height="20" alt="Delete"/>
                 </button>
-                <button class="button" title="Select this file for printing" disabled={$status.state != "CONNECTED" || ($status.gcode_lines_done_total && $status.gcode_lines_done_total[0] == file.name)} on:click={() => {selectFile(file.name);}}>Select</button>
+                <button class="button" title="Select this file for printing" disabled={$status.state != "CONNECTED" || ($status.gcode_lines_done_total && $status.gcode_lines_done_total[0] == `${file.name}.gcode`)} on:click={() => {selectFile(file.name);}}>Select</button>
             </div>
         </div>
     {/each}

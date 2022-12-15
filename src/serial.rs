@@ -54,6 +54,8 @@ pub trait SerialProtocol {
     // Adds metadata to a command, e.g: Line number and checksum for Marlin
     fn add_message_frame(&self, line_no: u32, cmd: &str) -> String;
     fn get_reset_line_no_cmd(&self, line_no: u32) -> String;
+    fn get_stop_cmd(&self, emergency: bool) -> String;
+    fn get_fan_speed_cmd(&self, index:u32, speed: f64) -> String;
 }
 
 pub struct PrinterComms {
