@@ -24,22 +24,27 @@ export function api_url() {
     return 'http://' + window.location.hostname + ":5000/api/";
 }
 
-const status = readable({
-    "connected": false, 
+const default_status = {
+    "host_connected": false,
+    "printer_connected": false, 
     "temperatures":[],
     "manual_control_enabled": false,
-    }, (set) => {
-    let incrementCounter = setInterval( () => {
+}
+
+const status = readable(default_status, (set) => {
+    let refresh_status = () => {
         fetch_api("GET", "status")
         .then(data => {
+            data["host_connected"] = true;
             set(data)
         }).catch(err => {
+            set(default_status);
             console.error(err);
+        }).then(() => {
+            setTimeout(refresh_status, 1000)
         });
-    }, 1000);
-    return () => {
-      clearInterval(incrementCounter);
-    };
+    }
+    refresh_status();
   });
 
 

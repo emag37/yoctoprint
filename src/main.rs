@@ -1,9 +1,7 @@
 use std::path::{PathBuf};
 use std::io::{Error,ErrorKind};
-use crate::printer::Printer;
+use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
-#[cfg(feature = "simulated_printer")]
-use rand;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
 
@@ -13,74 +11,39 @@ mod rest_api;
 mod internal_api;
 mod printer;
 mod marlin;
+mod interval_timer;
 
-
-#[cfg(feature = "simulated_printer")]
-fn handle_incoming_cmd(cur_status : &mut internal_api::PrinterStatus, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
-    use std::str::FromStr;
-
-    match cmd {
-        PrinterCommand::GetStatus => {
-            return internal_api::PrinterResponse::Status(Ok(cur_status.clone()));
-        },
-        PrinterCommand::DeleteGcodeFile(path) => {
-            println!("Delete path: {:?}", file::get_abs_gcode_path(base_path, path));
-            internal_api::PrinterResponse::GenericResult(std::fs::remove_file(file::get_abs_gcode_path(base_path, path)))
-        },
-        PrinterCommand::SetGcodeFile(path) => {
-            let total_lines = rand::random::<u32>() % 500000;
-            let cur_line = rand::random::<u32>() % total_lines;
-            cur_status.gcode_lines_done_total = Some((path.to_str().unwrap().to_string(), cur_line, total_lines));
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        PrinterCommand::Home(axes) => {
-            println!("Homing: {:?}", axes);
-            std::thread::sleep_ms(3000);
-            cur_status.manual_control_enabled = true;
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        PrinterCommand::ManualMove(pos) => {
-            println!("Move: {:?}", pos);
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        PrinterCommand::SetTemperature(temp) => {
-            println!("Set temperature: {:?}", temp);
-            for cur_temp in &mut cur_status.temperatures {
-                if cur_temp.measured_from == temp.to_set && ((temp.index.is_some() && cur_temp.index == temp.index.unwrap()) || temp.index.is_none()) {
-                    cur_temp.target = temp.target;
-                }
-            }
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        PrinterCommand::StopPrint => {
-            println!("Stopping the print!");
-            cur_status.state = internal_api::PrintState::CONNECTED;
-            cur_status.gcode_lines_done_total = None;
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        PrinterCommand::PausePrint => {
-            println!("Pausing the print!");
-            cur_status.state = internal_api::PrintState::PAUSED;
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        PrinterCommand::StartPrint => {
-            println!("Starting the print!");
-            cur_status.state = internal_api::PrintState::STARTED;
-            internal_api::PrinterResponse::GenericResult(Ok(()))
-        },
-        _ => return internal_api::PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "We haven't simulated that yet")))
-    }
-}
-
-#[cfg(not(feature = "simulated_printer"))]
-fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
+fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
     if printer.is_none() {
         match cmd {
             PrinterCommand::GetStatus => {
                 return internal_api::PrinterResponse::Status(Ok(internal_api::PrinterStatus::default()))
             }
-            PrinterCommand::Connect(_,_) => {},
+            PrinterCommand::Connect(path, baud)=> {
+                let path_str = path.to_str().unwrap();
+    
+                if path_str == "sim" {
+                    *printer = Some(Box::new(SimulatedPrinter::new()));
+                    return internal_api::PrinterResponse::GenericResult(Ok(()))
+                } else {
+                match serial::PrinterComms::new(path_str, *baud) {
+                    Ok(p) => {
+                        println!("Will connect printer @: {} baud: {}", path_str, baud);
+                            match Printer::new(p) {
+                                Ok(p) => {
+                                    *printer = Some(Box::new(p));
+                                    return internal_api::PrinterResponse::GenericResult(Ok(()))
+                                }
+                                Err(e) => {return internal_api::PrinterResponse::GenericResult(Err(e));}
+                            }
+                    }
+                    Err(e) => {
+                        println!("Error connecting printer @ {}, baud {}. {}", path_str, baud, e);
+                        return PrinterResponse::GenericResult(Err(e));
+                        }
+                    }
+                }
+            }
             _ => {
                 return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::NotFound, "No printer connected")));
             }
@@ -90,24 +53,6 @@ fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::Printe
     let printer_ref = printer.as_mut().unwrap();
 
     match cmd {
-        PrinterCommand::Connect(path, baud)=> {
-            if printer.is_some() {
-                return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::AlreadyExists, "Printer already connected, disconnect it first")));
-            }
-
-            let path_str = path.to_str().unwrap();
-            match serial::PrinterComms::new(path_str, *baud) {
-                Ok(p) => {
-                    println!("Will connect printer @: {} baud: {}", path_str, baud);
-                    *printer = Printer::new(p);
-                    return internal_api::PrinterResponse::GenericResult(Ok(()));
-                }
-                Err(e) => {
-                    println!("Error connecting printer @ {}, baud {}. {}", path_str, baud, e);
-                    return PrinterResponse::GenericResult(Err(e));
-                }
-            }
-        }
         PrinterCommand::Disconnect => {
             *printer = None;
             return internal_api::PrinterResponse::GenericResult(Ok(()));
@@ -140,6 +85,9 @@ fn handle_incoming_cmd(printer: &mut Option<Printer>, cmd: &internal_api::Printe
         PrinterCommand::Home(axes) => {
             return internal_api::PrinterResponse::GenericResult(printer_ref.go_home(axes));
         },
+        PrinterCommand::Connect(_, _) => {
+            return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::AlreadyExists, "Printer already connected, disconnect it first")));
+        }
     }
 }
 
@@ -168,26 +116,9 @@ fn init_gcode_dir(base_dir: &PathBuf) -> std::io::Result<PathBuf> {
 }
 
 fn main() {
-    #[cfg(feature = "simulated_printer")]
-    let mut sim_status = internal_api::PrinterStatus{ 
-        connected: true,
-        manual_control_enabled: false, 
-        state: internal_api::PrintState::STARTED, 
-        temperatures: vec![
-            internal_api::Temperature{measured_from: internal_api::ProbePoint::HOTEND, index: 0,
-            power: 128,
-            current: 75.6,
-            target: 220.0},
-            internal_api::Temperature{measured_from: internal_api::ProbePoint::BED, index: 0,
-                power: 128,
-                current: 23.4,
-                target: 70.0}
-        ], 
-        position: internal_api::Position{x:10.0, y:1.2, z:20.5, e: 100.0}, 
-        gcode_lines_done_total: Some(("sheriff_woody.gcode".to_string(), 102034, 750876))
-    };
+    let mut scan_timer = interval_timer::IntervalTimer::new(std::time::Duration::from_secs(2));
+    let mut printer : Option<Box<dyn PrinterControl>> = None;
 
-    let mut printer : Option<Printer> = None;
     let base_dir = init_base_dir().unwrap();
     init_gcode_dir(&base_dir).unwrap();
 
@@ -198,12 +129,9 @@ fn main() {
     let _api = std::thread::spawn( ||{
         rest_api::run_api(they_send, they_recv, base_dir_api);
     });
-    
+
     loop {
-        if let Ok(new_msg) =  we_recv.recv_timeout(std::time::Duration::from_millis(5)) {
-            #[cfg(feature = "simulated_printer")]
-            let resp = handle_incoming_cmd(&mut sim_status, &new_msg, &base_dir);
-            #[cfg(not(feature = "simulated_printer"))]
+        if let Ok(new_msg) =  we_recv.try_recv() {
             let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
 
             we_send.send(resp).expect("Error sending response to external API");
@@ -215,13 +143,19 @@ fn main() {
             } else {
                 cur_printer.poll_new_status();
             }
-        } else {
+        } else if scan_timer.check() {
             if let Ok(found) = serial::find_printer() {
                 println!("Found printer with capabilities: {:?}", found.fw_info);
-                printer = Printer::new(found);
+                match Printer::new(found) {
+                    Ok(p) => {
+                        printer = Some(Box::new(p))
+                    }
+                    Err(e) => {
+                        println!("Got error connecting printer: {:?}", e);
+                    }
+                }
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-
 }

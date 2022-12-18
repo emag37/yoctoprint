@@ -81,7 +81,7 @@ pub enum PrintState {
 
 #[derive(Serialize, Debug, Clone)]
 pub struct PrinterStatus {
-    pub connected: bool,
+    pub printer_connected: bool,
     pub manual_control_enabled: bool,
     pub state: PrintState,
     pub temperatures: Vec<Temperature>,
@@ -91,7 +91,7 @@ pub struct PrinterStatus {
 
 impl Default for PrinterStatus {
     fn default() -> PrinterStatus {
-        PrinterStatus { connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default() }
+        PrinterStatus { printer_connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default() }
     }
 }
 

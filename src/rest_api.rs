@@ -44,6 +44,21 @@ fn resp_generic_result_or_err(crossbeam_result: Result<PrinterResponse, RecvErro
         }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+struct ConnectParams {
+    pub port : String,
+    pub baud : u32
+}
+
+#[post("/connect", format = "application/json", data = "<params>")]
+fn connect(comms: &State<InternalComms>, params: Json<ConnectParams>) -> Result<(), ApiError> {
+    if let Err(e) = comms.to_internal.send(PrinterCommand::Connect(params.port.clone().into(), params.baud)) {
+        return Err(crossbeam_err_to_io_err(e));
+    }
+
+    resp_generic_result_or_err(comms.from_internal.recv())
+}
+
 #[get("/status")]
 fn status(comms: &State<InternalComms>) -> Result<Json<PrinterStatus>, ApiError> {
     if let Err(e) = comms.to_internal.send(PrinterCommand::GetStatus) {
@@ -100,6 +115,12 @@ struct RelativeCoords {
 
 #[post("/move", format = "application/json", data = "<relative_coords>")]
 fn move_rel(comms: &State<InternalComms>, relative_coords : Json<RelativeCoords>) -> Result<(), ApiError> {
+    if [&relative_coords.x, &relative_coords.y, &relative_coords.z].iter()
+    .any(|coord| coord.is_some() && coord.unwrap() > 20. || coord.unwrap() < 0.) ||
+    (relative_coords.e.is_some() && relative_coords.e.unwrap() > 100. || relative_coords.e.unwrap() < 0.){
+        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Coordinate target out of bounds!")));
+    }
+
     if let Err(e) = comms.to_internal.send(
         PrinterCommand::ManualMove(internal_api::Position{x: relative_coords.x.unwrap_or(0.0), 
         y: relative_coords.y.unwrap_or(0.0), 
@@ -202,6 +223,9 @@ fn pause_print(comms: &State<InternalComms>) -> Result<(), ApiError> {
 
 #[post("/set_temperature", format = "application/json", data = "<temperature>")]
 fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureTarget>) -> Result<(), ApiError> {
+    if temperature.target > 300. || temperature.target < 0. {
+        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid temperature")));
+    }
     if let Err(e) = comms.to_internal.send(PrinterCommand::SetTemperature(*temperature)) {
         return Err(crossbeam_err_to_io_err(e));
     }
@@ -226,7 +250,7 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
     let cors = CorsOptions::default().to_cors().unwrap();
 
     let api_rocket = rocket::build()
-    .mount("/api", routes![status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature])
+    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
     .manage(data_dir as DataDir)
     .attach(cors);

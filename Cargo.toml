@@ -3,10 +3,6 @@ name = "yoctoprint"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-simulated_printer = []
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 serialport = "4.2.0"
 regex = "1.6.0"

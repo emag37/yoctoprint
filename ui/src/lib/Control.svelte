@@ -20,6 +20,14 @@ let desired_temperatures = {}
 
 onMount(initTemperatures);
 
+function validateFeed() {
+    if (current_feed < 0.1) {
+        current_feed = 0.1;
+    } else if (current_feed > 100) {
+        current_feed = 100;
+    }
+}
+
 function initTemperatures() {
     if ($status.temperatures === undefined) {
         setTimeout(initTemperatures, 0.2);
@@ -139,18 +147,18 @@ function set_temperature(id, index, new_temp) {
         
         <button disabled={controls_disabled} style="grid-column: 7; grid-row: 2" on:click={() => move("E", "+")}>Extrude</button>
         <div class="feed_adjust">
-            <input type="number" id="feed" min="0.1" max="100" step="0.1" bind:value={current_feed}>
+            <input type="number" id="feed" min="0.1" max="100" step="0.1" on:change={validateFeed} bind:value={current_feed}>
             <label for="feed">mm</label>
         </div>
         
         <button disabled={controls_disabled} style="grid-column: 7; grid-row: 4 on:click={() => move("E", "-")}">Retract</button>
 
         <div style="width: 10px; grid-column: 8"></div>
-        <div class="title" style="grid-row: 1; grid-column: 9">Heater</div>
+        <div class="title" style="grid-row: 1; grid-column: 9;">Heater</div>
         {#each $status.temperatures as temperature, idx}
-        <div class="temp_adjust" style="grid-row: {2 + idx}">
+        <div class="temp_adjust" style="grid-row: {2 + idx}; grid-column:9;">
             <label for="set_temp_{temperature.measured_from}">{temperature.measured_from}</label>
-            <input type="number" id="set_temp_{temperature.measured_from}" min="20" max="300" bind:value={desired_temperatures[temperature.measured_from]}/>
+            <input type="number" id="set_temp_{temperature.measured_from}" min="0" max="300" bind:value={desired_temperatures[temperature.measured_from]}/>
             <div>°C</div>
             <button on:click={() => {
                 set_temperature(temperature.measured_from, temperature.index, desired_temperatures[temperature.measured_from]);
@@ -172,6 +180,7 @@ function set_temperature(id, index, new_temp) {
 }
 .controls_container {
     display: grid;
+    
     grid-row: 1;
     grid-column: 1;
     border:solid;
@@ -209,6 +218,7 @@ function set_temperature(id, index, new_temp) {
     text-align: center;
     padding-right: 5px;
     flex-basis: 20%;
+    width:75px;
 }
 .feed_adjust > label {
     vertical-align: text-bottom;
@@ -218,6 +228,7 @@ function set_temperature(id, index, new_temp) {
 .temp_adjust {
     display: flex;
     flex-wrap: wrap;
+    
     grid-column: 9;
     align-self: center;
     background-color: gray;
@@ -234,10 +245,10 @@ function set_temperature(id, index, new_temp) {
 }
 .temp_adjust > input {
     font-size: large;
-    flex-basis: 50%;
 }
 
 .xyz_container {
+    grid-template-columns: repeat(6, auto) auto 10px 200px;
     grid-row: 1;
     grid-column: 1;
     grid-gap: 10px;

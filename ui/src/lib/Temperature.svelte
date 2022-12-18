@@ -5,7 +5,7 @@
 let temperatures = []
 
 const unsubscribe = status.subscribe(new_status => {
-    if (new_status.connected) {
+    if (new_status.printer_connected) {
         temperatures = new_status.temperatures;
         for (let temp of temperatures) {
             temp.target_low =  temp.target - 5;
