@@ -192,14 +192,19 @@ impl PrinterControl for Printer {
         if self.state != PrintState::STARTED && self.state != PrintState::DONE && self.state != PrintState::PAUSED {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be stopped from this state ({:?})!", self.state)));
         }
-        
-        if self.is_busy {
-            self.send_cmd_read_until_response(self.protocol.get_stop_cmd(false).as_str(), None);
-        }
-        self.send_cmd_read_until_response(self.protocol.get_fan_speed_cmd(0, 0.).as_str(), None);
-        self.disable_all_heaters();
-        self.transition_state(PrintState::CONNECTED);
-        Ok(())
+
+        let mut stop_sequence = || -> Result<()> {
+            if self.is_busy {
+                self.send_cmd_read_until_response(self.protocol.get_stop_cmd(false).as_str(), None)?;
+            }
+            
+            self.send_cmd_read_until_response(self.protocol.get_fan_speed_cmd(0, 0.).as_str(), None)?;
+            self.disable_all_heaters();
+            self.transition_state(PrintState::CONNECTED);
+            Ok(())
+        };
+
+        stop_sequence()
     }
 
     fn pause(&mut self) -> Result<()> {
@@ -239,6 +244,12 @@ impl PrinterControl for Printer {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, "Printer cannot be moved manually, home it first?"));
         }
 
+        if [new_pos.x, new_pos.y, new_pos.z].iter()
+        .any(|coord| *coord > 20. || *coord < 0.) ||
+        (new_pos.e > 100. || new_pos.e < 0.){
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Relative move beyond acceptable range!"));
+        }
+
         println!("Set position to {:?}", new_pos);
         for cmd in self.protocol.get_move_cmds(new_pos, self.move_mode_xyz_e) {
             if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
@@ -252,6 +263,14 @@ impl PrinterControl for Printer {
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()> {
         if matches!(self.state, PrintState::DEAD) {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Temperature cannot be modified from this state ({:?})!", self.state)));
+        }
+
+        if !self.temperatures.iter().map(|t|t.measured_from).any(|p| p == new_temp.to_set) {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Invalid heater {:?}",new_temp.to_set)));
+        }
+
+        if new_temp.target > 300. || new_temp.target < 0. {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid target temperature"));
         }
 
         println!("Set temperatures to: {:?}", new_temp);
@@ -274,7 +293,9 @@ impl Printer {
                 move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
-                    ret_printer.send_cmd_read_until_response(cmd.as_str(), None);
+                    if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
+                        return Err(Error::new(std::io::ErrorKind::InvalidData, "Error probing initial temperatures."));
+                    }
                 }
                 return Ok(ret_printer);
             } else {
@@ -368,7 +389,9 @@ impl Printer {
         }).flatten().collect::<Vec<String>>();
 
         for cmd in cmds {
-            self.send_cmd_read_until_response(cmd.as_str(), None);
+            if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
+                println!("Got error: {:?}", e);
+            }
         }
        
     }

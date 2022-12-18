@@ -115,12 +115,6 @@ struct RelativeCoords {
 
 #[post("/move", format = "application/json", data = "<relative_coords>")]
 fn move_rel(comms: &State<InternalComms>, relative_coords : Json<RelativeCoords>) -> Result<(), ApiError> {
-    if [&relative_coords.x, &relative_coords.y, &relative_coords.z].iter()
-    .any(|coord| coord.is_some() && coord.unwrap() > 20. || coord.unwrap() < 0.) ||
-    (relative_coords.e.is_some() && relative_coords.e.unwrap() > 100. || relative_coords.e.unwrap() < 0.){
-        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Coordinate target out of bounds!")));
-    }
-
     if let Err(e) = comms.to_internal.send(
         PrinterCommand::ManualMove(internal_api::Position{x: relative_coords.x.unwrap_or(0.0), 
         y: relative_coords.y.unwrap_or(0.0), 
@@ -223,9 +217,6 @@ fn pause_print(comms: &State<InternalComms>) -> Result<(), ApiError> {
 
 #[post("/set_temperature", format = "application/json", data = "<temperature>")]
 fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureTarget>) -> Result<(), ApiError> {
-    if temperature.target > 300. || temperature.target < 0. {
-        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid temperature")));
-    }
     if let Err(e) = comms.to_internal.send(PrinterCommand::SetTemperature(*temperature)) {
         return Err(crossbeam_err_to_io_err(e));
     }
@@ -257,6 +248,6 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
 
     
     return rocket::execute(async move {
-        api_rocket.launch().await;
+        let _rocket = api_rocket.launch().await.expect("Error launching REST API");
     });
 }
