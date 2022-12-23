@@ -7,8 +7,6 @@ import arrowRight from '../assets/arrow-right-bold-circle.svg';
 import { send_api_cmd, status } from '../data';
 import { onMount } from 'svelte';
 
-const controlButtonSize = 75;
-
 let current_step = 0.1;
 let step_input = 2;
 let current_feed = 10;
@@ -107,32 +105,32 @@ function set_temperature(id, index, new_temp) {
 <div class="controls_container">
     <div class="xyz_container">
         <div class="title" style="grid-row: 1; grid-column: 1/ span 3">X/Y</div>
-        <button disabled={controls_disabled} style="grid-column: 2; grid-row: 2" on:click={() => move("Y", "+")} > 
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 2; grid-row: 2" on:click={() => move("Y", "+")} > 
             <img class="control_button_img" src={arrowUp}  alt="Y+"/>
         </button>
-        <button disabled={controls_disabled} style="grid-column: 1; grid-row: 3" on:click={() => move("X", "-")} > 
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 1; grid-row: 3" on:click={() => move("X", "-")} > 
             <img class="control_button_img" src={arrowLeft} alt="X-"/>
         </button>
-        <button disabled={request_active} style="grid-column: 2; grid-row: 3" on:click={() => home(["X", "Y"])} > 
+        <button disabled={request_active} class="control_button" style="grid-column: 2; grid-row: 3" on:click={() => home(["X", "Y"])} > 
             <img class="control_button_img" src={homeIcon} alt="Home X/Y"/>
         </button>
-        <button disabled={controls_disabled} style="grid-column: 3; grid-row: 3" on:click={() => move("X", "+")}> 
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 3; grid-row: 3" on:click={() => move("X", "+")}> 
             <img class="control_button_img" src={arrowRight} alt="X+"/>
         </button>
-        <button disabled={controls_disabled} style="grid-column: 2; grid-row: 4" on:click={() => move("Y", "-")}> 
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 2; grid-row: 4" on:click={() => move("Y", "-")}> 
             <img class="control_button_img" src={arrowDown}  alt="Y-"/>
         </button>
 
         <div style="width: 10px; grid-column: 4"></div>
 
         <div class="title" style="grid-row: 1; grid-column: 5">Z</div>
-        <button disabled={controls_disabled} style="grid-column: 5; grid-row: 2" on:click={() => move("Z", "+")}> 
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 5; grid-row: 2" on:click={() => move("Z", "+")}> 
             <img class="control_button_img" src={arrowUp} alt="Z+"/>
         </button>
-        <button disabled={request_active} style="grid-column: 5; grid-row: 3" on:click={() => home(["Z"])}> 
+        <button disabled={request_active} class="control_button" style="grid-column: 5; grid-row: 3" on:click={() => home(["Z"])}> 
             <img class="control_button_img" src={homeIcon}  alt="Home Z"/>
         </button>
-        <button disabled={controls_disabled} style="grid-column: 5; grid-row: 4" on:click={() => move("Z", "-")}> 
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 5; grid-row: 4" on:click={() => move("Z", "-")}> 
             <img class="control_button_img" src={arrowDown}  alt="Z-"/>
         </button>
 
@@ -145,13 +143,13 @@ function set_temperature(id, index, new_temp) {
 
         <div class="title" style="grid-row: 1; grid-column: 7">Tool (E)</div>
         
-        <button disabled={controls_disabled} style="grid-column: 7; grid-row: 2" on:click={() => move("E", "+")}>Extrude</button>
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 2" on:click={() => move("E", "+")}>Extrude</button>
         <div class="feed_adjust">
             <input type="number" id="feed" min="0.1" max="100" step="0.1" on:change={validateFeed} bind:value={current_feed}>
             <label for="feed">mm</label>
         </div>
         
-        <button disabled={controls_disabled} style="grid-column: 7; grid-row: 4 on:click={() => move("E", "-")}">Retract</button>
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 4 on:click={() => move("E", "-")}">Retract</button>
 
         <div style="width: 10px; grid-column: 8"></div>
         <div class="title" style="grid-row: 1; grid-column: 9;">Heater</div>
@@ -160,7 +158,7 @@ function set_temperature(id, index, new_temp) {
             <label for="set_temp_{temperature.measured_from}">{temperature.measured_from}</label>
             <input type="number" id="set_temp_{temperature.measured_from}" min="0" max="300" bind:value={desired_temperatures[temperature.measured_from]}/>
             <div>°C</div>
-            <button on:click={() => {
+            <button disabled={$status.state === "STARTED"} on:click={() => {
                 set_temperature(temperature.measured_from, temperature.index, desired_temperatures[temperature.measured_from]);
             }}>Set</button>
         </div>
@@ -228,7 +226,6 @@ function set_temperature(id, index, new_temp) {
 .temp_adjust {
     display: flex;
     flex-wrap: wrap;
-    
     grid-column: 9;
     align-self: center;
     background-color: gray;
@@ -245,6 +242,7 @@ function set_temperature(id, index, new_temp) {
 }
 .temp_adjust > input {
     font-size: large;
+    text-align: center;
 }
 
 .xyz_container {
@@ -255,6 +253,9 @@ function set_temperature(id, index, new_temp) {
     display: inline-grid;
 }
 
+.control_button:disabled {
+    background-color: darkgrey;
+}
 .control_button_img {
     width: 50px;
     height: 50px;

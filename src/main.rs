@@ -1,4 +1,5 @@
 use std::path::{PathBuf};
+use log::{debug, info, error, warn};
 use std::io::{Error,ErrorKind};
 use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
@@ -119,6 +120,9 @@ fn main() {
     let mut scan_timer = interval_timer::IntervalTimer::new(std::time::Duration::from_secs(2));
     let mut printer : Option<Box<dyn PrinterControl>> = None;
 
+    env_logger::init();
+    info!("Yoctoprint starting!");
+
     let base_dir = init_base_dir().unwrap();
     init_gcode_dir(&base_dir).unwrap();
 
@@ -144,14 +148,15 @@ fn main() {
                 cur_printer.poll_new_status();
             }
         } else if scan_timer.check() {
+            info!("Looking for printer...");
             if let Ok(found) = serial::find_printer() {
-                println!("Found printer with capabilities: {:?}", found.fw_info);
+                info!("Found printer with capabilities: {:?}", found.fw_info);
                 match Printer::new(found) {
                     Ok(p) => {
                         printer = Some(Box::new(p))
                     }
                     Err(e) => {
-                        println!("Got error connecting printer: {:?}", e);
+                        error!("Got error connecting printer: {:?}", e);
                     }
                 }
             }

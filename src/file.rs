@@ -2,6 +2,7 @@ use std::io::{BufReader, BufRead, Seek, Read};
 use std::vec::Vec;
 use std::path::{Path,PathBuf};
 use std::fs::{File};
+use log::{debug, info, error, warn};
 
 use crate::internal_api::{self, FileInfo};
 
@@ -11,14 +12,17 @@ pub const GCODE_DIR: &str = "gcode";
 pub fn find_gcode_files(start_dir: &Path) -> std::io::Result<Vec<internal_api::FileInfo>> {
     let mut files : Vec<internal_api::FileInfo> = Vec::new();
 
+    debug!("Looking for gcode files starting from {:?}", start_dir);
     if start_dir.is_dir() {
         for entry in std::fs::read_dir(start_dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
+                debug!("Found directory {:?}", path);
                 files.append(&mut find_gcode_files(&path)?);
             } else if path.extension().is_some() && path.extension().unwrap().eq_ignore_ascii_case("gcode") {
                 let metadata = std::fs::metadata(&path).unwrap();
+                debug!("Found a gcode file {:?}", path);
                 files.push(FileInfo{path: path, size: metadata.len(), last_modified_since_epoch: metadata.modified()
                     .unwrap_or(std::time::UNIX_EPOCH)
                     .duration_since(std::time::UNIX_EPOCH)
@@ -26,6 +30,9 @@ pub fn find_gcode_files(start_dir: &Path) -> std::io::Result<Vec<internal_api::F
             }
         }
     }
+
+    info!("Found {} GCode files", files.len());
+    
     Ok(files)
 }
 

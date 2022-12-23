@@ -20,23 +20,28 @@ onDestroy(unsubscribe);
 
 </script>
 
-{#each temperatures as temperature}
-<div class="readout">
-    <div class="probe">{temperature.measured_from +  " " + temperature.index}</div>
-    <div class="sensor">
-            <meter id="current_temp" class="meter" value={temperature.current} min="0" max="300" optimum={temperature.target} low={temperature.target_low} high={temperature.target_high}/>
-            <label class="digital" for="current_temp">Current: {temperature.current}ºC</label>
+<div class="panel">
+    {#each temperatures as temperature}
+    <div class="readout">
+        <div class="probe">{temperature.measured_from +  " " + temperature.index}</div>
+        <div class="sensor">
+                <meter id="current_temp" class="meter" value={temperature.current} min="0" max="300" optimum={temperature.target} low={temperature.target_low} high={temperature.target_high}/>
+                <label class="digital" for="current_temp">Current: {temperature.current}ºC</label>
 
-            <meter id="target_temp" class="meter" value={temperature.target} min="0" max="300" low="75" high="220"/>
-            <label class="digital" for="current_temp">Target: {temperature.target}ºC</label>
-            
-            <meter id="power" class="meter" value={temperature.power} min="0" max="128"/>
-            <label class="digital" for="power">Power: {temperature.power}</label>
+                <meter id="target_temp" class="meter" value={temperature.target} min="0" max="300" low="75" high="220"/>
+                <label class="digital" for="current_temp">Target: {temperature.target}ºC</label>
+                
+                <meter id="power" class="meter" value={temperature.power} min="0" max="128"/>
+                <label class="digital" for="power">Power: {temperature.power}</label>
+        </div>
     </div>
+    {/each}
 </div>
-{/each}
 
 <style>
+.panel {
+    display: block;
+}
 .readout {
     display: flex;
     flex-direction: column;

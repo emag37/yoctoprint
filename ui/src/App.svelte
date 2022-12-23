@@ -35,11 +35,11 @@
       <div class="card">
         <Control />
       </div>
-      <div class="card">
-        <Temperature />
-      </div>
-      <div class="card">
-        <Files />
+      <div class="files_temp">
+        <div class="files">
+          <Files />
+        </div>
+        <Temperature />  
       </div>
     </div>
   </Modal>
@@ -47,18 +47,11 @@
 </main>
 
 <style>
-  .logo {
-    height: 6em;
-    padding: 1.5em;
-    will-change: filter;
+  .files_temp {
+    display: flex;
+    justify-content: space-between;
   }
-  .logo:hover {
-    filter: drop-shadow(0 0 2em #646cffaa);
-  }
-  .logo.svelte:hover {
-    filter: drop-shadow(0 0 2em #ff3e00aa);
-  }
-  .read-the-docs {
-    color: #888;
+  .files {
+    flex-basis: 40%;
   }
 </style>

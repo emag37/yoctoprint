@@ -5,7 +5,7 @@ use std::io::*;
 use crate::internal_api;
 use enumset::{EnumSet, EnumSetType};
 use internal_api::*;
-use std::collections::HashSet;
+use log::{debug, info, error, warn};
 
 #[derive(Copy, Clone)]
 pub enum CommandSpeed {
@@ -65,14 +65,14 @@ pub struct PrinterComms {
 
 impl PrinterComms {
     pub fn new(path: &str, baud: u32) -> std::io::Result<PrinterComms> {
-        println!("Trying port {} with baud rate {}", path, baud);
+        debug!("Trying port {} with baud rate {}", path, baud);
 
         if let Ok(test_port) = serialport::new(path, baud).open() {
             let mut new_port = PrinterComms{port: BufReader::new(test_port), fw_info: std::collections::HashMap::new()};
             if let Ok(reply) = new_port.send_cmd_await_result("M115", CommandSpeed::FAST) {
                 if reply.contains("FIRMWARE_NAME") { 
                     new_port.parse_fw_info(&reply);
-                    println!("Got response {} on port {} with baud rate {}",  reply, path, baud);
+                    info!("Got response {} on port {} with baud rate {}",  reply, path, baud);
                     return Ok(new_port);
                 }
             }
@@ -94,7 +94,7 @@ impl PrinterComms {
                 } 
                 Err(e) => {
                     if e.kind() != std::io::ErrorKind::TimedOut {
-                     println!("Got error reading from serial port {}", e);
+                     error!("Got error reading from serial port {}", e);
                     }
                     break;
                 }
@@ -139,6 +139,7 @@ impl PrinterComms {
             }
             self.fw_info.insert(kv[0].to_string(), kv[1].to_string());
         }
+        info!("Got firmware info: {:?}", self.fw_info);
     }
 
     pub fn send_cmd_await_result(&mut self, cmd: &str, speed: CommandSpeed) -> std::io::Result<String> {
@@ -148,7 +149,7 @@ impl PrinterComms {
         
         self.purge_read();
 
-        println!("Write cmd: {}", cmd);
+        debug!("Write cmd: {}", cmd);
         if let Err(e) = self.port.get_mut().write(format!("{}{}", cmd, '\n').as_bytes()) {
             return Err(e);
         }
@@ -214,7 +215,7 @@ pub fn find_printer() -> std::io::Result<PrinterComms> {
                 }
             }
         }
-        Err(_) => {println!("Cannot scan ports!")}
+        Err(_) => {error!("Cannot scan ports!")}
     }
 
     return Err(std::io::Error::new(

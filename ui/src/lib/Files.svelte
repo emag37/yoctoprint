@@ -169,6 +169,7 @@
         padding:3px;
         display: flex;
         justify-content: space-between;
+        font-weight: normal;
     }
     .filename {
         text-align: start;
