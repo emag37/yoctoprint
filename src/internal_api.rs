@@ -87,11 +87,12 @@ pub struct PrinterStatus {
     pub temperatures: Vec<Temperature>,
     pub position: Position,
     pub gcode_lines_done_total: Option<(String, u32, u32)>,
+    pub print_time_remaining: Option<std::time::Duration>
 }
 
 impl Default for PrinterStatus {
     fn default() -> PrinterStatus {
-        PrinterStatus { printer_connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default() }
+        PrinterStatus { printer_connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default(), print_time_remaining: None }
     }
 }
 

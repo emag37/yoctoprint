@@ -8,6 +8,7 @@ use crate::file;
 use crate::marlin;
 use serial::*;
 use internal_api::PrintState;
+use core::time;
 use std::io::Error;
 use std::io::{BufRead,Result};
 use std::path::PathBuf;
@@ -29,6 +30,32 @@ pub trait PrinterControl {
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()>;
 }
 
+struct PrintTimer {
+    last_update: std::time::Instant,
+    duration: std::time::Duration
+}
+
+impl PrintTimer {
+    pub fn new() -> Self {
+        return PrintTimer { last_update: std::time::Instant::now(), duration: std::time::Duration::from_secs(0) }
+    }
+
+    // Add elapsed time to the print duration
+    pub fn update(&mut self) {
+        let now = std::time::Instant::now();
+        self.duration += now - self.last_update;
+        self.last_update = now;
+    }
+
+    // Reset the reference to now, to skip any time we spent paused, for example.
+    pub fn skip(&mut self) {
+        self.last_update = std::time::Instant::now();
+    }
+
+    pub fn elapsed(&self) -> std::time::Duration {
+        self.duration
+    }
+}
 pub struct Printer {
     pub comms: serial::PrinterComms,
     pub protocol: Box<dyn SerialProtocol>,
@@ -38,7 +65,8 @@ pub struct Printer {
     position: Position,
     move_mode_xyz_e: (PositionMode, PositionMode),
     state: PrintState,
-    is_busy: bool
+    is_busy: bool,
+    print_timer: PrintTimer
 }
 
 impl PrinterControl for Printer {
@@ -68,10 +96,13 @@ impl PrinterControl for Printer {
 
     
     fn print_next_line(&mut self) -> std::io::Result<()> {
+        self.print_timer.update();
+        
         if self.is_busy {
             self.poll_new_status();
             return Ok(())
         }
+
         if self.state != PrintState::STARTED {
             return Err(Error::new(std::io::ErrorKind::NotFound, format!("Printer is not in {:?} state ({:?})!", PrintState::STARTED, self.state)));
         }
@@ -133,6 +164,13 @@ impl PrinterControl for Printer {
     }
 
     fn get_status(&self) -> Result<internal_api::PrinterStatus>{
+        let time_remaining = match &self.to_print {
+            Some(p) => {
+                p.get_remaining_time(self.print_timer.elapsed())
+            }
+            None => None
+        };
+
         Ok(internal_api::PrinterStatus{ 
             printer_connected: true,
             manual_control_enabled: self.can_move_manually(), 
@@ -142,7 +180,9 @@ impl PrinterControl for Printer {
             gcode_lines_done_total: match &self.to_print {
                 Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
-            }})
+            },
+            print_time_remaining: time_remaining
+        })
     }
 
     fn get_state(&self) -> PrintState {
@@ -158,6 +198,7 @@ impl PrinterControl for Printer {
 
             Ok(f) => {
                 self.to_print = Some(f);
+                self.print_timer = PrintTimer::new();
                 if let Err(e) = self.send_cmd_read_until_response(self.protocol.get_reset_line_no_cmd(0).as_str(), None){
                     return Err(e);
                 }
@@ -178,6 +219,7 @@ impl PrinterControl for Printer {
         
         if self.to_print.is_some() && self.to_print.as_ref().unwrap().command_line_no != 0 && self.state != PrintState::PAUSED {
             let current_gcode_file_path = self.to_print.as_ref().unwrap().path.clone();
+            self.print_timer.skip();
             if let Err(e) = self.set_gcode_file(&current_gcode_file_path) {
                 return Err(e);
             }
@@ -211,7 +253,7 @@ impl PrinterControl for Printer {
         if self.state != PrintState::STARTED {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be paused from this state ({:?})!", self.state)));
         }
-
+        self.print_timer.update();
         //TODO: Save position
         self.transition_state(PrintState::PAUSED);
         Ok(())
@@ -290,7 +332,8 @@ impl Printer {
             if fw.to_lowercase().contains("marlin") {
                 let mut ret_printer = Printer{comms, protocol:Box::new(marlin::Marlin{}), to_print: None, state: PrintState::CONNECTED,
                 homed_axes:EnumSet::new(), temperatures: Vec::new(), position: Position::default(),
-                move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false};
+                move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false,
+                print_timer: PrintTimer::new()};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
@@ -406,7 +449,8 @@ pub struct SimulatedPrinter {
     position: Position,
     state: PrintState,
     last_line_at : std::time::Instant,
-    last_temp_update: std::time::Instant
+    last_temp_update: std::time::Instant,
+    print_timer: PrintTimer
 }
 
 
@@ -417,7 +461,8 @@ impl SimulatedPrinter {
         SimulatedPrinter { to_print: None, state: PrintState::CONNECTED,
             homed_axes:EnumSet::new(), temperatures: init_temps, position: Position::default(), 
             last_line_at: std::time::Instant::now(),
-            last_temp_update: std::time::Instant::now()}
+            last_temp_update: std::time::Instant::now(),
+            print_timer: PrintTimer::new()}
     }
 }
 
@@ -431,6 +476,7 @@ impl PrinterControl for SimulatedPrinter {
     }
 
     fn print_next_line(&mut self) -> std::io::Result<()> {
+        self.print_timer.update();
         if self.to_print.is_none() {
             return Err(Error::new(std::io::ErrorKind::NotFound, "No printer"));
         } else if std::time::Instant::now() - self.last_line_at >= std::time::Duration::from_millis(200) {
@@ -463,6 +509,13 @@ impl PrinterControl for SimulatedPrinter {
     }
 
     fn get_status(&self) -> Result<internal_api::PrinterStatus> {
+        let time_remaining = match &self.to_print {
+            Some(p) => {
+                p.get_remaining_time(self.print_timer.elapsed())
+            }
+            None => None
+        };
+
         Ok(internal_api::PrinterStatus{ 
             printer_connected: true,
             manual_control_enabled: self.homed_axes.is_superset(enum_set!(Axis::X | Axis::Y | Axis::Z)), 
@@ -472,7 +525,8 @@ impl PrinterControl for SimulatedPrinter {
             gcode_lines_done_total: match &self.to_print {
                 Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
-            }})
+            },
+            print_time_remaining: time_remaining})
     }
 
     fn get_state(&self) -> PrintState {
@@ -492,6 +546,11 @@ impl PrinterControl for SimulatedPrinter {
     }
 
     fn start(&mut self) -> Result<()> {
+        if self.state == PrintState::PAUSED {
+            self.print_timer.skip();
+        } else {
+            self.print_timer = PrintTimer::new()
+        }
         self.state = PrintState::STARTED;
         self.homed_axes.clear();
         Ok(())
@@ -508,6 +567,7 @@ impl PrinterControl for SimulatedPrinter {
     }
 
     fn pause(&mut self) -> Result<()> {
+        self.print_timer.update();
         self.state = PrintState::PAUSED;
         Ok(())
     }

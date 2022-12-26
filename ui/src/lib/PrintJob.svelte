@@ -11,18 +11,27 @@
     let current_gcode = NO_GCODE_MSG;
     let lines_done = 0;
     let lines_total = 1;
+    let time_remaining;
 
     const unsubscribe = status.subscribe(new_status => {
-        if (new_status.connected && new_status.gcode_lines_done_total) {
-            [current_gcode, lines_done, lines_total] = $status.gcode_lines_done_total;
+        if (new_status.host_connected && new_status.gcode_lines_done_total) {
+            [current_gcode, lines_done, lines_total] = new_status.gcode_lines_done_total;
             gcode_loaded = true;
+            let time_remaining_secs = new_status.print_time_remaining.secs + new_status.print_time_remaining.nanos * 1e-9;
+            time_remaining = new Date(time_remaining_secs * 1000).toISOString().slice(11,19);
         } else {
             current_gcode = NO_GCODE_MSG;
             gcode_loaded = false;
+            time_remaining = "Unavailable";
         }
     });
 
     onDestroy(unsubscribe);
+
+    function lowerCase(text) {
+        text = text.toLowerCase();
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
 </script>
 
 <div class="container">
@@ -31,8 +40,10 @@
     {#if gcode_loaded}
         <progress class="progress_bar" value={lines_done / lines_total}></progress>
 
-        {#if $status.state == "CONNECTED" || $status.state == "PAUSED" || $status.state == "DONE"}
-            <button title="Start Printing" on:click={ () => {
+        <div class="time_remaining">{lowerCase($status.state)}, ETA: {time_remaining}</div>
+        {#if $status.state == "CONNECTED" || $status.state == "PAUSED" || $status.state == "DONE" || $status.state == "STARTED"}
+            
+            <button disabled={$status.state != "CONNECTED" && $status.state != "PAUSED"} title="Start Printing" on:click={ () => {
                 send_api_cmd("POST", "start_print")
                 .catch((err) => {
                     alert(err);
@@ -40,10 +51,7 @@
             }}>
                 <img src={playIcon} width="50" height="50" alt="Play"/>
             </button>
-        {/if}
-
-        {#if $status.state == "STARTED" || $status.state == "PAUSED"}
-            <button title="Stop Printing - this will cancel the current job!" on:click={()=> {
+            <button disabled={$status.state != "DONE" && $status.state != "STARTED" && $status.state != "PAUSED"} title="Stop Printing - this will cancel the current job!" on:click={()=> {
                 send_api_cmd("POST", "stop_print")
                 .catch((err) => {
                     alert(err);
@@ -52,13 +60,12 @@
                 <img src={stopIcon} width="50" height="50" alt="Stop"/>
             </button>
 
-            <button disabled={$status.state == "PAUSED"} title="Pause Printing - this will pause the current job. You may resume it afterwards" on:click={() => {
+            <button disabled={$status.state != "STARTED"} title="Pause Printing - this will pause the current job. You may resume it afterwards" on:click={() => {
                 send_api_cmd("POST", "pause_print")
                 .catch((err) => {
                     alert(err);
                 });
-            }}>
-                <img src={pauseIcon} width="50" height="50" alt="Stop"/>
+            }}>  <img src={pauseIcon} width="50" height="50" alt="Stop"/>
             </button>
         {/if}
     {/if}
@@ -76,10 +83,15 @@
     .container > button {
         margin: 5px;
     }
+    .container > button:disabled {
+        background-color: darkgrey;
+    }
     .container > div {
         margin: 5px;
     }
-
+    .time_remaining {
+        flex-basis: 100%;
+    }
     .current_file {
         font-size: xx-large;
         flex-basis: 100%;
