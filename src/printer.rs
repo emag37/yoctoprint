@@ -6,9 +6,10 @@ use crate::serial;
 use crate::internal_api;
 use crate::file;
 use crate::marlin;
+use std::ops::Div;
+use std::time::Duration;
 use serial::*;
 use internal_api::PrintState;
-use core::time;
 use std::io::Error;
 use std::io::{BufRead,Result};
 use std::path::PathBuf;
@@ -450,7 +451,8 @@ pub struct SimulatedPrinter {
     state: PrintState,
     last_line_at : std::time::Instant,
     last_temp_update: std::time::Instant,
-    print_timer: PrintTimer
+    print_timer: PrintTimer,
+    gcode_send_interval:std::time::Duration
 }
 
 
@@ -462,7 +464,9 @@ impl SimulatedPrinter {
             homed_axes:EnumSet::new(), temperatures: init_temps, position: Position::default(), 
             last_line_at: std::time::Instant::now(),
             last_temp_update: std::time::Instant::now(),
-            print_timer: PrintTimer::new()}
+            print_timer: PrintTimer::new(),
+            gcode_send_interval: Duration::ZERO
+        }
     }
 }
 
@@ -479,7 +483,7 @@ impl PrinterControl for SimulatedPrinter {
         self.print_timer.update();
         if self.to_print.is_none() {
             return Err(Error::new(std::io::ErrorKind::NotFound, "No printer"));
-        } else if std::time::Instant::now() - self.last_line_at >= std::time::Duration::from_millis(200) {
+        } else if std::time::Instant::now() - self.last_line_at >= self.gcode_send_interval {
             let mut to_print = self.to_print.as_mut().unwrap();
 
             if to_print.cur_line_in_file < to_print.line_count {
@@ -536,6 +540,14 @@ impl PrinterControl for SimulatedPrinter {
     fn set_gcode_file(&mut self, abs_path: &PathBuf) -> Result<()> {
         match file::GCodeFile::new(abs_path) {
             Ok(file) => {
+                match &file.get_duration_lines() {
+                    Some((lines, dur)) => {
+                        self.gcode_send_interval = dur.div(*lines);
+                    },
+                    None => {
+                        self.gcode_send_interval = Duration::from_millis(20);
+                    }
+                }
                 self.to_print = Some(file);
                 Ok(())
             }

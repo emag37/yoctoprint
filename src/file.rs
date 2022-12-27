@@ -114,6 +114,10 @@ impl PrintDurationEstimator{
 
         return remaining;
     }
+
+    pub fn get_last_time_point_duration(&self) -> (u32, Duration){
+        self.line_no_elapsed.last().unwrap().clone()
+    }
 }
 
 impl GCodeFile {
@@ -135,7 +139,7 @@ impl GCodeFile {
 
                 let reader = BufReader::new(ret_file.file.by_ref());
                 let mut total_time: f64 = -1.;
-
+                
                 for line in reader.lines() {
                     let line_str = line.unwrap();
                     ret_file.line_count += 1;
@@ -221,6 +225,15 @@ impl GCodeFile {
         match &self.print_duration {
             Some(estimator) => {
                 Some(estimator.get_remaining_time(self.cur_line_in_file, cur_time_secs))
+            }
+            None => None
+        }
+    }
+
+    pub fn get_duration_lines(&self) -> Option<(u32, Duration)> {
+        match &self.print_duration {
+            Some(estimator) => {
+                Some(estimator.get_last_time_point_duration())
             }
             None => None
         }

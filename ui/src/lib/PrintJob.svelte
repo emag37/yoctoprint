@@ -32,6 +32,12 @@
         text = text.toLowerCase();
         return text.charAt(0).toUpperCase() + text.slice(1);
     }
+
+    const PAUSEABLE_STATES = ["STARTED"];
+
+    const STARTABLE_STATES = ["CONNECTED", "PAUSED", "DONE"];
+
+    const STOPPABLE_STATES = ["STARTED", "PAUSED", "DONE"];
 </script>
 
 <div class="container">
@@ -43,7 +49,7 @@
         <div class="time_remaining">{lowerCase($status.state)}, ETA: {time_remaining}</div>
         {#if $status.state == "CONNECTED" || $status.state == "PAUSED" || $status.state == "DONE" || $status.state == "STARTED"}
             
-            <button disabled={$status.state != "CONNECTED" && $status.state != "PAUSED"} title="Start Printing" on:click={ () => {
+            <button disabled={!STARTABLE_STATES.includes($status.state)} title="Start Printing" on:click={ () => {
                 send_api_cmd("POST", "start_print")
                 .catch((err) => {
                     alert(err);
@@ -51,7 +57,7 @@
             }}>
                 <img src={playIcon} width="50" height="50" alt="Play"/>
             </button>
-            <button disabled={$status.state != "DONE" && $status.state != "STARTED" && $status.state != "PAUSED"} title="Stop Printing - this will cancel the current job!" on:click={()=> {
+            <button disabled={!STOPPABLE_STATES.includes($status.state)} title="Stop Printing - this will cancel the current job!" on:click={()=> {
                 send_api_cmd("POST", "stop_print")
                 .catch((err) => {
                     alert(err);
@@ -60,7 +66,7 @@
                 <img src={stopIcon} width="50" height="50" alt="Stop"/>
             </button>
 
-            <button disabled={$status.state != "STARTED"} title="Pause Printing - this will pause the current job. You may resume it afterwards" on:click={() => {
+            <button disabled={!PAUSEABLE_STATES.includes($status.state)} title="Pause Printing - this will pause the current job. You may resume it afterwards" on:click={() => {
                 send_api_cmd("POST", "pause_print")
                 .catch((err) => {
                     alert(err);
@@ -76,7 +82,7 @@
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        width: fit-content;
+        width: auto;
         align-self: center;
     }
 

@@ -5,6 +5,7 @@ use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
+use clap::{Parser, Arg};
 
 mod serial;
 mod file;
@@ -116,11 +117,37 @@ fn init_gcode_dir(base_dir: &PathBuf) -> std::io::Result<PathBuf> {
     }
 }
 
+
+const DEFAULT_WEBUI_DIR : &str = "./ui/dist";
+
+#[derive(Parser, Debug)]
+#[command()]
+struct Args {
+    /// Directory containing WebUI
+    #[arg(long, default_value=DEFAULT_WEBUI_DIR)]
+    web_ui: String,
+
+    // Log level
+    #[arg(short, long, default_value="info")]
+    log_level: String
+}
+
 fn main() {
     let mut scan_timer = interval_timer::IntervalTimer::new(std::time::Duration::from_secs(2));
     let mut printer : Option<Box<dyn PrinterControl>> = None;
 
-    env_logger::init();
+    let args = Args::parse();
+
+    let log_level = match args.log_level.to_lowercase().as_str() {
+        "error" => log::Level::Error,
+        "warn" => log::Level::Warn,
+        "info" => log::Level::Info,
+        "debug" => log::Level::Debug,
+        "trace" => log::Level::Trace,
+        invalid => {println!("Invalid log level: {}, default to info", invalid); log::Level::Info}
+    };
+
+    simple_logger::init_with_level(log_level).unwrap();
     info!("Yoctoprint starting!");
 
     let base_dir = init_base_dir().unwrap();
@@ -131,7 +158,7 @@ fn main() {
 
     let base_dir_api = base_dir.clone();
     let _api = std::thread::spawn( ||{
-        rest_api::run_api(they_send, they_recv, base_dir_api);
+        rest_api::run_api(they_send, they_recv, base_dir_api, args.web_ui.into());
     });
 
     loop {

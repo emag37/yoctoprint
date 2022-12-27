@@ -11,13 +11,17 @@ use rocket::serde::json::{Json};
 use rocket::serde::{Serialize,Deserialize};
 use rocket_cors::CorsOptions;
 use enumset::EnumSet;
+use rocket::fs::{NamedFile};
 
 struct InternalComms {
     to_internal: Sender<PrinterCommand>,
     from_internal: Receiver<PrinterResponse>
 }
 
+struct WebUiDir(PathBuf);
+
 type DataDir = PathBuf;
+
 struct ApiError(std::io::Error);
 
 impl From<std::io::Error> for ApiError{
@@ -224,6 +228,16 @@ fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureT
     resp_generic_result_or_err(comms.from_internal.recv())
 }
 
+#[get("/")]
+async fn index(webui_dir: &State<WebUiDir>) -> std::option::Option<NamedFile> {
+    println!("Current dir: {:?}. Index: {:?}", std::env::current_dir(), webui_dir.0.as_path().join("index.html"));
+    NamedFile::open(webui_dir.0.as_path().join("index.html")).await.ok()
+}
+
+#[get("/<file..>")]
+async fn serve_file(file: PathBuf, webui_dir: &State<WebUiDir>) -> Option<NamedFile> {
+    NamedFile::open(webui_dir.0.as_path().join(file)).await.ok()
+}
 
 impl<'r> rocket::response::Responder<'r, 'static> for ApiError {
     fn respond_to(self, _request: &Request<'_>) -> rocket::response::Result<'static> {
@@ -237,13 +251,15 @@ impl<'r> rocket::response::Responder<'r, 'static> for ApiError {
     }
 }
 
-pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<PrinterResponse>, data_dir: PathBuf) {
+pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<PrinterResponse>, data_dir: PathBuf, webui_dir: PathBuf) {
     let cors = CorsOptions::default().to_cors().unwrap();
 
     let api_rocket = rocket::build()
     .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature])
+    .mount("/", routes![index, serve_file])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
     .manage(data_dir as DataDir)
+    .manage(WebUiDir(webui_dir))
     .attach(cors);
 
     
