@@ -130,6 +130,23 @@ fn move_rel(comms: &State<InternalComms>, relative_coords : Json<RelativeCoords>
     resp_generic_result_or_err(comms.from_internal.recv())
 }
 
+#[derive(Debug, Deserialize, Clone)]
+struct FanSpeed {
+    index : Option<u32>,
+    speed: f64
+}
+#[post("/set_fan_speed", format = "application/json", data = "<fan_speed>")]
+fn set_fan_speed(comms: &State<InternalComms>, fan_speed : Json<FanSpeed>) -> Result<(), ApiError> {
+    if let Err(e) = comms.to_internal.send(PrinterCommand::SetFanSpeed((
+        fan_speed.index.unwrap_or(0),
+        fan_speed.speed
+    ))) {
+        return Err(crossbeam_err_to_io_err(e));
+    }
+
+    resp_generic_result_or_err(comms.from_internal.recv())
+}
+
 #[put("/upload_gcode?<filename>", format="application/octet-stream", data = "<data>")]
 async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir>) -> Result<(), ApiError> {
     let size_limit: ByteUnit = "50 MB".parse().unwrap();
@@ -255,7 +272,7 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
     let cors = CorsOptions::default().to_cors().unwrap();
 
     let api_rocket = rocket::build()
-    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature])
+    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature, set_fan_speed])
     .mount("/", routes![index, serve_file])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
     .manage(data_dir as DataDir)

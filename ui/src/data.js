@@ -1,6 +1,8 @@
 import { onMount } from 'svelte';
 import { writable, readable, derived } from 'svelte/store';
 
+let refreshStatus = null;
+
 export function fetch_api(method, path, body = null) {
     return fetch(api_url() + path, {method: method,
     headers: {
@@ -18,6 +20,7 @@ export function send_api_cmd(method, path, body = null) {
         'content-type' : 'application/json'
     },
     body : body})
+    .then(refreshStatus)
 }
 
 export function api_url() {
@@ -29,10 +32,11 @@ const default_status = {
     "printer_connected": false, 
     "temperatures":[],
     "manual_control_enabled": false,
+    "fan_speed":[0.]
 }
 
 const status = readable(default_status, (set) => {
-    let refresh_status = () => {
+    refreshStatus =  () => 
         fetch_api("GET", "status")
         .then(data => {
             data["host_connected"] = true;
@@ -40,12 +44,12 @@ const status = readable(default_status, (set) => {
         }).catch(err => {
             set(default_status);
             console.error(err);
-        }).then(() => {
-            setTimeout(refresh_status, 1000)
         });
-    }
-    refresh_status();
-  });
+
+    let refreshInterval = () => refreshStatus().then(() => {setTimeout(() => {refreshInterval()}, 1000)});
+    
+    refreshInterval();
+});
 
 
 export {status}

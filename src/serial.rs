@@ -7,12 +7,6 @@ use enumset::{EnumSet, EnumSetType};
 use internal_api::*;
 use log::{debug, info, error, warn};
 
-#[derive(Copy, Clone)]
-pub enum CommandSpeed {
-    FAST,
-    LONG
-}
-
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub enum Response {
@@ -41,7 +35,8 @@ pub enum PositionModeCmd {
 #[derive(Debug)]
 #[derive(Copy, Clone)]
 pub enum OutgoingCmd {
-    PositionModeChange(PositionModeCmd)
+    PositionModeChange(PositionModeCmd),
+    FanSpeedChange((u32, f64))
 }
 
 pub trait SerialProtocol {
@@ -69,7 +64,7 @@ impl PrinterComms {
 
         if let Ok(test_port) = serialport::new(path, baud).open() {
             let mut new_port = PrinterComms{port: BufReader::new(test_port), fw_info: std::collections::HashMap::new()};
-            if let Ok(reply) = new_port.send_cmd_await_result("M115", CommandSpeed::FAST) {
+            if let Ok(reply) = new_port.send_cmd_await_result("M115", &std::time::Duration::from_millis(10)) {
                 if reply.contains("FIRMWARE_NAME") { 
                     new_port.parse_fw_info(&reply);
                     info!("Got response {} on port {} with baud rate {}",  reply, path, baud);
@@ -102,13 +97,6 @@ impl PrinterComms {
         }
     }
     
-    fn timeout_for_cmd_speed(speed: &CommandSpeed) -> std::time::Duration{
-        match speed {
-            CommandSpeed::FAST => {std::time::Duration::from_secs(3)}
-            CommandSpeed::LONG => {std::time::Duration::from_secs(60)}
-        }
-    }
-
     fn parse_fw_info(&mut self, m115_reply: &str) {
         let mut lines = m115_reply.lines();
 
@@ -142,9 +130,9 @@ impl PrinterComms {
         info!("Got firmware info: {:?}", self.fw_info);
     }
 
-    pub fn send_cmd_await_result(&mut self, cmd: &str, speed: CommandSpeed) -> std::io::Result<String> {
+    pub fn send_cmd_await_result(&mut self, cmd: &str, timeout: &std::time::Duration) -> std::io::Result<String> {
         let mut readbuf: [u8; 1024] = [0; 1024];
-        let start_at =  std::time::Instant::now();
+        let mut start_at =  std::time::Instant::now();
         let mut ret_str = String::new();
         
         self.purge_read();
@@ -155,7 +143,7 @@ impl PrinterComms {
         }
         let sent_at = std::time::Instant::now();
         
-        while std::time::Instant::now() - start_at < Self::timeout_for_cmd_speed(&speed) {
+        while std::time::Instant::now() - start_at < *timeout {
             let result = match self.port.read(&mut readbuf) {
                 Ok(n_read) => {
                     if n_read == 0 { continue; }
@@ -179,6 +167,7 @@ impl PrinterComms {
             match result {
                 Ok(new_str) => {
                     println!("Got response {} after {:.3} secs", new_str, sent_at.elapsed().as_secs_f64());
+                    start_at = std::time::Instant::now();
                     ret_str.push_str(&new_str);
                     if ret_str.contains("ok") {
                         return Ok(ret_str);
@@ -189,7 +178,7 @@ impl PrinterComms {
                 }
             }
             
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
 
         Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "Timed out waiting for printer to reply!"))
@@ -207,6 +196,7 @@ pub fn find_printer() -> std::io::Result<PrinterComms> {
     match serialport::available_ports() {
         Ok(ports) => {
             for port in ports {
+                debug!("Found serial port: {}", port.port_name);
                 for baud in BAUD_RATES {
                     match PrinterComms::new(port.port_name.as_str(), *baud) {
                         Ok(comms) => {return Ok(comms)}

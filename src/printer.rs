@@ -6,8 +6,10 @@ use crate::serial;
 use crate::internal_api;
 use crate::file;
 use crate::marlin;
+
 use std::ops::Div;
 use std::time::Duration;
+use std::vec;
 use serial::*;
 use internal_api::PrintState;
 use std::io::Error;
@@ -29,6 +31,7 @@ pub trait PrinterControl {
     fn go_home(&mut self, axes: &EnumSet<Axis>) -> Result<()>;
     fn move_relative(&mut self, new_pos: &Position) -> Result<()>;
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()>;
+    fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()>;
 }
 
 struct PrintTimer {
@@ -67,7 +70,8 @@ pub struct Printer {
     move_mode_xyz_e: (PositionMode, PositionMode),
     state: PrintState,
     is_busy: bool,
-    print_timer: PrintTimer
+    print_timer: PrintTimer,
+    fan_speeds: Vec<f64>
 }
 
 impl PrinterControl for Printer {
@@ -133,6 +137,12 @@ impl PrinterControl for Printer {
                         },
                     }
                 },
+                OutgoingCmd::FanSpeedChange((idx, speed)) => {
+                    if idx as usize >= self.fan_speeds.len() {
+                        self.fan_speeds.resize((idx + 1) as usize, 0.);
+                    }
+                    self.fan_speeds[idx as usize] = speed;
+                }
             }
         }
 
@@ -182,7 +192,8 @@ impl PrinterControl for Printer {
                 Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
             },
-            print_time_remaining: time_remaining
+            print_time_remaining: time_remaining,
+            fan_speed: self.fan_speeds.clone()
         })
     }
 
@@ -316,13 +327,27 @@ impl PrinterControl for Printer {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid target temperature"));
         }
 
-        println!("Set temperatures to: {:?}", new_temp);
+        info!("Set temperatures to: {:?}", new_temp);
         for cmd in self.protocol.get_set_temperature_cmds(new_temp) {
             if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
                 return Err(e);
             }
         }
 
+        Ok(())
+    }
+
+    fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()> {
+        info!("Set fan {} to speed {}", index, speed);
+
+        if speed < 0. || speed > 1. {
+            return Err(Error::new(std::io::ErrorKind::InvalidInput, "Fan speed must be between 0 and 1."));
+        }
+
+        if let Err(e) = self.send_cmd_read_until_response(self.protocol.get_fan_speed_cmd(index, speed).as_str(), None) {
+            return Err(e);
+        }
+            
         Ok(())
     }
 }
@@ -334,7 +359,8 @@ impl Printer {
                 let mut ret_printer = Printer{comms, protocol:Box::new(marlin::Marlin{}), to_print: None, state: PrintState::CONNECTED,
                 homed_axes:EnumSet::new(), temperatures: Vec::new(), position: Position::default(),
                 move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false,
-                print_timer: PrintTimer::new()};
+                print_timer: PrintTimer::new(),
+                fan_speeds: vec![0.]};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
@@ -372,6 +398,8 @@ impl Printer {
     } 
 
     fn send_cmd_read_until_response(&mut self, cmd: &str, line_no: Option<u32>) -> std::io::Result<()> {
+        debug!("Send command: {}", cmd);
+        
         let to_send = 
         match line_no {
             Some(no) => {self.protocol.add_message_frame(no, cmd)}
@@ -452,7 +480,8 @@ pub struct SimulatedPrinter {
     last_line_at : std::time::Instant,
     last_temp_update: std::time::Instant,
     print_timer: PrintTimer,
-    gcode_send_interval:std::time::Duration
+    gcode_send_interval:std::time::Duration,
+    fan_speeds: Vec<f64>
 }
 
 
@@ -465,7 +494,8 @@ impl SimulatedPrinter {
             last_line_at: std::time::Instant::now(),
             last_temp_update: std::time::Instant::now(),
             print_timer: PrintTimer::new(),
-            gcode_send_interval: Duration::ZERO
+            gcode_send_interval: Duration::ZERO,
+            fan_speeds: vec![0.]
         }
     }
 }
@@ -530,7 +560,8 @@ impl PrinterControl for SimulatedPrinter {
                 Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
             },
-            print_time_remaining: time_remaining})
+            print_time_remaining: time_remaining,
+            fan_speed: self.fan_speeds.clone()})
     }
 
     fn get_state(&self) -> PrintState {
@@ -601,5 +632,15 @@ impl PrinterControl for SimulatedPrinter {
         }
        }
        Ok(())
+    }
+
+    fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()> {
+        let vec_idx = index as usize;
+        if vec_idx > self.fan_speeds.len() {
+            self.fan_speeds.resize((vec_idx + 1) as usize, 0.);
+        }
+
+        self.fan_speeds[vec_idx] = speed;
+        Ok(())
     }
 }

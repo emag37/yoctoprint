@@ -90,6 +90,9 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
         PrinterCommand::Connect(_, _) => {
             return PrinterResponse::GenericResult(Err(std::io::Error::new(ErrorKind::AlreadyExists, "Printer already connected, disconnect it first")));
         }
+        PrinterCommand::SetFanSpeed((index, speed)) => {
+            return PrinterResponse::GenericResult(printer_ref.set_fan_speed(*index, *speed));
+        }
     }
 }
 

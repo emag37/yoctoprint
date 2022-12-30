@@ -4,6 +4,7 @@ import arrowUp from '../assets/arrow-up-bold-circle.svg';
 import arrowDown from '../assets/arrow-down-bold-circle.svg';
 import arrowLeft from '../assets/arrow-left-bold-circle.svg';
 import arrowRight from '../assets/arrow-right-bold-circle.svg';
+import NumberControl from './NumberControl.svelte';
 import { send_api_cmd, status } from '../data';
 import { onMount } from 'svelte';
 
@@ -14,9 +15,6 @@ let current_feed = 10;
 let request_active = false;
 let controls_disabled
 $: controls_disabled = $status.manual_control_enabled === false;
-let desired_temperatures = {}
-
-onMount(initTemperatures);
 
 function validateFeed() {
     if (current_feed < 0.1) {
@@ -26,16 +24,14 @@ function validateFeed() {
     }
 }
 
-function initTemperatures() {
-    if ($status.temperatures === undefined) {
-        setTimeout(initTemperatures, 0.2);
-    } else {
-        desired_temperatures = Object.fromEntries($status.temperatures.map((temp) => {
-            return [temp.measured_from, temp.current];
-        }));
-    }
+function setFanSpeed(id, index, new_speed) {
+    send_api_cmd("POST", "set_fan_speed", JSON.stringify({
+        "index" : index,
+        "speed" : new_speed / 100.
+    })).catch((err) => {
+        alert(err);
+    });
 }
-
 function adjustStep() {
     switch(step_input) {
         case 1:
@@ -91,7 +87,7 @@ function home(axes) {
     });
 }
 
-function set_temperature(id, index, new_temp) {
+function setTemperature(id, index, new_temp) {
     send_api_cmd("POST", "set_temperature", JSON.stringify({
         "to_set": id,
         "index" : index,
@@ -121,7 +117,7 @@ function set_temperature(id, index, new_temp) {
             <img class="control_button_img" src={arrowDown}  alt="Y-"/>
         </button>
 
-        <div style="width: 10px; grid-column: 4"></div>
+        <div class="spacer" style="grid-column: 4"></div>
 
         <div class="title" style="grid-row: 1; grid-column: 5">Z</div>
         <button disabled={controls_disabled} class="control_button" style="grid-column: 5; grid-row: 2" on:click={() => move("Z", "+")}> 
@@ -139,7 +135,7 @@ function set_temperature(id, index, new_temp) {
             <div>{current_step}mm</div>
         </div>
 
-        <div style="width: 10px; grid-column: 6"></div>
+        <div class="spacer" style="grid-column: 6"></div>
 
         <div class="title" style="grid-row: 1; grid-column: 7">Tool (E)</div>
         
@@ -151,18 +147,19 @@ function set_temperature(id, index, new_temp) {
         
         <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 4 on:click={() => move("E", "-")}">Retract</button>
 
-        <div style="width: 10px; grid-column: 8"></div>
-        <div class="title" style="grid-row: 1; grid-column: 9;">Heater</div>
-        {#each $status.temperatures as temperature, idx}
-        <div class="temp_adjust" style="grid-row: {2 + idx}; grid-column:9;">
-            <label for="set_temp_{temperature.measured_from}">{temperature.measured_from}</label>
-            <input type="number" id="set_temp_{temperature.measured_from}" min="0" max="300" bind:value={desired_temperatures[temperature.measured_from]}/>
-            <div>°C</div>
-            <button disabled={$status.state === "STARTED"} on:click={() => {
-                set_temperature(temperature.measured_from, temperature.index, desired_temperatures[temperature.measured_from]);
-            }}>Set</button>
+        <div class="spacer" style="grid-column: 8"></div>
+        <div class="title" style="grid-row: 1; grid-column: 9;">Heater/Fan</div>
+        <div class="temp_container">
+            {#each $status.temperatures as temperature}
+                <NumberControl label={temperature.measured_from} index={temperature.index + 1} min=0 max=300 disabled={$status.state === "STARTED"} current_value={temperature.current} units="°C" onChange={setTemperature}/>
+            {/each}
         </div>
-        {/each}
+
+        <div class="fan_container">
+            {#each $status.fan_speed as speed, idx}
+                <NumberControl label={"Fan"} index={idx} min=0 max=100 disabled={$status.state === "STARTED"} current_value={speed * 100.} units="%" onChange={setFanSpeed}/>
+            {/each}
+        </div>
     </div>
 
 </div>
@@ -206,7 +203,6 @@ function set_temperature(id, index, new_temp) {
     max-height: 1.5em;
     justify-content: space-between;
     align-self: center;
-    background-color: gray;
     border-radius: 10px;
     padding: 10px;
 }
@@ -223,26 +219,11 @@ function set_temperature(id, index, new_temp) {
     font-size: large;
 }
 
-.temp_adjust {
-    display: flex;
-    flex-wrap: wrap;
+.temp_container {
+    display: block;
+    grid-row: 2/ span 3;
     grid-column: 9;
-    align-self: center;
-    background-color: gray;
-    border-radius: 10px;
-    padding: 10px;
-}
-
-.temp_adjust > label {
-    flex-basis: 100%;
-    font-weight: bolder;
-}
-.temp_adjust > button {
-    margin-left: auto;
-}
-.temp_adjust > input {
-    font-size: large;
-    text-align: center;
+    overflow-y: auto;
 }
 
 .xyz_container {
@@ -253,12 +234,21 @@ function set_temperature(id, index, new_temp) {
     display: inline-grid;
 }
 
-.control_button:disabled {
-    background-color: darkgrey;
-}
 .control_button_img {
     width: 50px;
     height: 50px;
+}
+
+.spacer {
+    width:10px;
+    grid-row: 1 / span 5;
+}
+
+.fan_container {
+    display: block;
+    grid-row: 4/span 2;
+    grid-column: 9;
+    overflow-y: auto;
 }
 
 </style>

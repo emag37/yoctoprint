@@ -87,12 +87,14 @@ pub struct PrinterStatus {
     pub temperatures: Vec<Temperature>,
     pub position: Position,
     pub gcode_lines_done_total: Option<(String, u32, u32)>,
-    pub print_time_remaining: Option<std::time::Duration>
+    pub print_time_remaining: Option<std::time::Duration>,
+    pub fan_speed: Vec<f64>
 }
 
 impl Default for PrinterStatus {
     fn default() -> PrinterStatus {
-        PrinterStatus { printer_connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default(), print_time_remaining: None }
+        PrinterStatus { printer_connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default(), print_time_remaining: None,
+        fan_speed: Vec::new() }
     }
 }
 
@@ -108,7 +110,8 @@ pub enum PrinterCommand {
     GetStatus,
     ManualMove(Position),
     Home(EnumSet<Axis>),
-    SetTemperature(TemperatureTarget)
+    SetTemperature(TemperatureTarget),
+    SetFanSpeed((u32, f64))
 }
 
 pub enum PrinterResponse {

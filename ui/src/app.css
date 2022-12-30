@@ -69,9 +69,6 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-button:disabled {
-  background-color: darkgrey;
-}
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -83,5 +80,8 @@ button:disabled {
   }
   button {
     background-color: #f9f9f9;
+  }
+  button:disabled {
+    background-color: darkgrey;
   }
 }

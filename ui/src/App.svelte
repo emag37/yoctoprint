@@ -5,7 +5,6 @@
   import Temperature from './lib/Temperature.svelte';
   import Files from './lib/Files.svelte';
   import PrintJob from './lib/PrintJob.svelte';
-
   import Modal from 'svelte-simple-modal';
   import YoctoprintConnectionModal from './lib/YoctoprintConnectionModal.svelte';
   import PrinterConnectionModal from './lib/PrinterConnectionModal.svelte';
@@ -43,7 +42,6 @@
       </div>
     </div>
   </Modal>
-  
 </main>
 
 <style>

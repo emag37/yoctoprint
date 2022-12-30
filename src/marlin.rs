@@ -94,6 +94,25 @@ impl Marlin {
         }
         return Ok(new_pos);
     }
+
+    fn parse_fan_speed(&self, in_str: &str) -> (u32, f64) {
+        let mut ret_idx = 0u32;
+        let mut ret_speed = 0.;
+
+        for segment in in_str.split(' ') {
+            match segment.chars().nth(0) {
+                Some('P') => {
+                    ret_idx = in_str[1..].parse::<u32>().unwrap();
+                },
+                Some('S') => {
+                    ret_speed = in_str[1..].parse::<f64>().unwrap();
+                    ret_speed /= 255.;
+                },
+                Some(_) | None => {}
+            }
+        }
+        (ret_idx, ret_speed)
+    }
 }
 
 
@@ -156,6 +175,8 @@ impl SerialProtocol for Marlin {
             Some(OutgoingCmd::PositionModeChange(PositionModeCmd::ExtruderOnly(PositionMode::ABSOLUTE)))
         } else if out_cmd.starts_with("M83") {
             Some(OutgoingCmd::PositionModeChange(PositionModeCmd::ExtruderOnly(PositionMode::RELATIVE)))
+        } else if out_cmd.starts_with("M106") || out_cmd.starts_with("M107") {
+            Some(OutgoingCmd::FanSpeedChange(self.parse_fan_speed(out_cmd)))
         } else {
             None
         }
