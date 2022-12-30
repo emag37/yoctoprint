@@ -51,6 +51,8 @@ pub trait SerialProtocol {
     fn get_reset_line_no_cmd(&self, line_no: u32) -> String;
     fn get_stop_cmd(&self, emergency: bool) -> String;
     fn get_fan_speed_cmd(&self, index:u32, speed: f64) -> String;
+    fn get_save_position_cmd(&self) -> String;
+    fn get_restore_position_cmd(&self) -> String;
 }
 
 pub struct PrinterComms {

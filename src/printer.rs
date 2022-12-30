@@ -237,7 +237,10 @@ impl PrinterControl for Printer {
             }
         }
 
-        //TODO: Restore position when resuming from pause
+        if self.state == PrintState::PAUSED {
+            self.send_cmd_read_until_response(self.protocol.get_restore_position_cmd().as_str(), None)?
+        }
+        
         self.transition_state(PrintState::STARTED);
         Ok(())
     }
@@ -266,7 +269,8 @@ impl PrinterControl for Printer {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be paused from this state ({:?})!", self.state)));
         }
         self.print_timer.update();
-        //TODO: Save position
+        
+        self.send_cmd_read_until_response(self.protocol.get_save_position_cmd().as_str(), None)?;
         self.transition_state(PrintState::PAUSED);
         Ok(())
     }
@@ -452,7 +456,7 @@ impl Printer {
     }
 
     fn can_move_manually(&self) -> bool {
-        self.homed_axes.is_superset(enum_set!(Axis::X | Axis::Y | Axis::Z))
+        self.homed_axes.is_superset(enum_set!(Axis::X | Axis::Y | Axis::Z)) || self.state == PrintState::PAUSED
     }
     
     fn disable_all_heaters(&mut self) {

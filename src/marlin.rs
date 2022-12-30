@@ -256,6 +256,14 @@ impl SerialProtocol for Marlin {
             format!("M106 P{} S{}", index, std::cmp::min((speed * 255.) as u32, 255)).to_string()
         }
     }
+
+    fn get_save_position_cmd(&self) -> String {
+        return "G60".to_string();
+    }
+
+    fn get_restore_position_cmd(&self) -> String {
+        return "G61 X Y Z".to_string();
+    }
 }
 
 
