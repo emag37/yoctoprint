@@ -103,8 +103,15 @@ impl PrintDurationEstimator{
 
         let expected_t = (next_elapsed_tp.saturating_sub(*prev_elapsed_tp))
                                     .div(*next_elapsed_idx - *prev_elapsed_idx)
-                                    .mul(cur_line_in_file); 
-        let mut remaining = self.line_no_elapsed.last().unwrap().1 - cur_time_secs;
+                                    .mul(cur_line_in_file);
+
+        let end_t = self.line_no_elapsed.last().unwrap().1;
+
+        if cur_time_secs >= end_t {
+            return Duration::ZERO;
+        }
+        
+        let mut remaining = end_t - cur_time_secs;
         
         if cur_time_secs >= expected_t {
             remaining = remaining.add(cur_time_secs.sub(expected_t));
@@ -284,6 +291,16 @@ mod tests {
         estimator.add_time_point(312., 3676);
 
         let rem = estimator.get_remaining_time(3500, Duration::from_secs(250));
+        assert!(rem.as_secs_f64() < 312. - 250.);
+    }
+
+    #[test]
+    fn estimator_time_point_later() {
+        let mut estimator = PrintDurationEstimator::new();
+        estimator.add_time_point(180., 2000);
+        estimator.add_time_point(312., 3676);
+
+        let rem = estimator.get_remaining_time(3500, Duration::from_secs(320));
         assert!(rem.as_secs_f64() < 312. - 250.);
     }
 }

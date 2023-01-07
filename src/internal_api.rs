@@ -52,7 +52,7 @@ pub struct Position {
 pub struct Temperature {
     pub measured_from: ProbePoint,
     pub index: u32, // For multiple extruders which report T0, T1, etc...
-    pub power: u8,
+    pub power: f64, // 0-1 percentage
     pub current: f64,
     pub target: f64
 }

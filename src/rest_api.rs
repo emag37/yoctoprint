@@ -247,7 +247,7 @@ fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureT
 
 #[get("/")]
 async fn index(webui_dir: &State<WebUiDir>) -> std::option::Option<NamedFile> {
-    println!("Current dir: {:?}. Index: {:?}", std::env::current_dir(), webui_dir.0.as_path().join("index.html"));
+    info!("Current dir: {:?}. Index: {:?}", std::env::current_dir(), webui_dir.0.as_path().join("index.html"));
     NamedFile::open(webui_dir.0.as_path().join("index.html")).await.ok()
 }
 

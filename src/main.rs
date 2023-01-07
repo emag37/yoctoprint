@@ -32,7 +32,7 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
                 } else {
                 match serial::PrinterComms::new(path_str, *baud) {
                     Ok(p) => {
-                        println!("Will connect printer @: {} baud: {}", path_str, baud);
+                        info!("Will connect printer @: {} baud: {}", path_str, baud);
                             match Printer::new(p) {
                                 Ok(p) => {
                                     *printer = Some(Box::new(p));
@@ -42,7 +42,7 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
                             }
                     }
                     Err(e) => {
-                        println!("Error connecting printer @ {}, baud {}. {}", path_str, baud, e);
+                        info!("Error connecting printer @ {}, baud {}. {}", path_str, baud, e);
                         return PrinterResponse::GenericResult(Err(e));
                         }
                     }
@@ -157,7 +157,7 @@ fn main() {
         "info" => log::Level::Info,
         "debug" => log::Level::Debug,
         "trace" => log::Level::Trace,
-        invalid => {println!("Invalid log level: {}, default to info", invalid); log::Level::Info}
+        invalid => {error!("Invalid log level: {}, default to info", invalid); log::Level::Info}
     };
 
     simple_logger::init_with_level(log_level).unwrap();
@@ -178,12 +178,12 @@ fn main() {
             .umask(0o777)    // Set umask, `0o027` by default.
             .stdout(stdout)  // Redirect stdout to `/tmp/daemon.out`.
             .stderr(stderr)  // Redirect stderr to `/tmp/daemon.err`.
-            .exit_action(|| println!("Executed before master process exits"))
+            .exit_action(|| error!("Executed before master process exits"))
             .privileged_action(|| "Executed before drop privileges");
     
         match daemonize.start() {
-            Ok(_) => println!("Success, daemonized"),
-            Err(e) => eprintln!("Error, {}", e),
+            Ok(_) => info!("Success, daemonized"),
+            Err(e) => error!("Error, {}", e),
         }
     }
 

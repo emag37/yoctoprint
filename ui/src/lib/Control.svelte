@@ -10,6 +10,8 @@ import NumberControl from './NumberControl.svelte';
 import { send_api_cmd, status } from '../data';
 import { onMount } from 'svelte';
 
+const step_map = [0.1, 1, 2, 3, 4, 5, 10, 20];
+
 let current_step = 0.1;
 let step_input = 2;
 let current_feed = 10;
@@ -35,20 +37,7 @@ function setFanSpeed(id, index, new_speed) {
     });
 }
 function adjustStep() {
-    switch(step_input) {
-        case 1:
-            current_step = 0.1;
-            break;
-        case 2:
-            current_step = 1;
-            break;
-        case 3:
-            current_step = 10;
-            break;
-        case 4:
-            current_step = 20;
-            break;
-    }
+    current_step = step_map[step_input];
 }
 
 function move(axis, direction) {
@@ -92,7 +81,7 @@ function home(axes) {
 function setTemperature(id, index, new_temp) {
     send_api_cmd("POST", "set_temperature", JSON.stringify({
         "to_set": id,
-        "index" : index,
+        "index" : index - 1,
         "target" : new_temp
     })).catch((err) => {
         alert(err);
@@ -133,7 +122,7 @@ function setTemperature(id, index, new_temp) {
         </button>
 
         <div class="step_adjust">
-            <input type="range" min="1" max="4" bind:value={step_input} on:input={adjustStep}/>
+            <input type="range" min="0" max="{step_map.length - 1}" bind:value={step_input} on:input={adjustStep}/>
             <div>{current_step}mm</div>
         </div>
 

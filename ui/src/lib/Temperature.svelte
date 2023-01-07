@@ -31,8 +31,8 @@ onDestroy(unsubscribe);
                 <meter id="target_temp" class="meter" value={temperature.target} min="0" max="300" low="75" high="220"/>
                 <label class="digital" for="current_temp">Target: {temperature.target}ºC</label>
                 
-                <meter id="power" class="meter" value={temperature.power} min="0" max="128"/>
-                <label class="digital" for="power">Power: {temperature.power}</label>
+                <meter id="power" class="meter" value={temperature.power} min="0" max="100"/>
+                <label class="digital" for="power">Power: {temperature.power * 100}%</label>
         </div>
     </div>
     {/each}

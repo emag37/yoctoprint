@@ -36,7 +36,8 @@ pub enum PositionModeCmd {
 #[derive(Copy, Clone)]
 pub enum OutgoingCmd {
     PositionModeChange(PositionModeCmd),
-    FanSpeedChange((u32, f64))
+    FanSpeedChange((u32, f64)),
+    HomeAxes(EnumSet<Axis>)
 }
 
 pub trait SerialProtocol {
@@ -118,13 +119,13 @@ impl PrinterComms {
 
         for cap_line in lines {
             if !cap_line.starts_with("Cap") {
-                println!("Expected line to start with Cap, but got {}", cap_line);
+                error!("Expected line to start with Cap, but got {}", cap_line);
                 continue;
             }
 
             let kv : Vec<&str> = cap_line.split(':').filter(|token| *token != "Cap").collect();
             if kv.len() != 2 {
-                println!("Expected key:value in line {}!", cap_line);
+                error!("Expected key:value in line {}!", cap_line);
                 continue;
             }
             self.fw_info.insert(kv[0].to_string(), kv[1].to_string());
@@ -132,6 +133,7 @@ impl PrinterComms {
         info!("Got firmware info: {:?}", self.fw_info);
     }
 
+    // Low-level send command and await, does not make assumptions about the underlying protocol.
     pub fn send_cmd_await_result(&mut self, cmd: &str, timeout: &std::time::Duration) -> std::io::Result<String> {
         let mut readbuf: [u8; 1024] = [0; 1024];
         let mut start_at =  std::time::Instant::now();
@@ -161,14 +163,14 @@ impl PrinterComms {
                     if e.kind() == std::io::ErrorKind::TimedOut {
                         continue;
                     }
-                    println!("Got error reading from serial port {} after", e);
+                    error!("Got error reading from serial port {} after", e);
                     Err(e)
                 }
             };
 
             match result {
                 Ok(new_str) => {
-                    println!("Got response {} after {:.3} secs", new_str, sent_at.elapsed().as_secs_f64());
+                    error!("Got response {} after {:.3} secs", new_str, sent_at.elapsed().as_secs_f64());
                     start_at = std::time::Instant::now();
                     ret_str.push_str(&new_str);
                     if ret_str.contains("ok") {

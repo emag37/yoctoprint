@@ -1,4 +1,5 @@
 extern crate lazy_static;
+use enumset::enum_set;
 use regex::Regex;
 
 use crate::internal_api;
@@ -42,7 +43,7 @@ impl Marlin {
                 _ => {0}
             };
 
-            Temperature{measured_from:point, index: idx, power: 0, current: cap.get(1).unwrap().as_str().parse::<f64>().unwrap(), target: cap.get(2).unwrap().as_str().parse::<f64>().unwrap()}
+            Temperature{measured_from:point, index: idx, power: 0., current: cap.get(1).unwrap().as_str().parse::<f64>().unwrap(), target: cap.get(2).unwrap().as_str().parse::<f64>().unwrap()}
         }).collect();
 
         if results.len() == 0 {
@@ -62,7 +63,7 @@ impl Marlin {
             };
             
             if let Some(mut res) = results.iter_mut().find(|elem| { elem.index == id && elem.measured_from == point}) {
-                res.power = cap.get(2).unwrap().as_str().parse::<u8>().unwrap();
+                res.power = cap.get(2).unwrap().as_str().parse::<f64>().unwrap() / 127.;
             }
         }
         Ok(results)
@@ -73,14 +74,14 @@ impl Marlin {
         
         for cap in POSITION_REGEX.captures_iter(in_str) {
             if cap.len() < 2 {
-                println!("Cannot parse position: {:?}", cap);
+                error!("Cannot parse position: {:?}", cap);
                 continue;
             }
 
             let val = cap.get(2).unwrap().as_str().parse::<f64>();
 
             if let Err(e) = val {
-                println!("Error parsing value: {}", e);
+                error!("Error parsing value: {}", e);
                 continue;
             }
 
@@ -89,10 +90,32 @@ impl Marlin {
                 Some('Y') => {new_pos.y = val.unwrap();},
                 Some('Z') => {new_pos.z = val.unwrap();},
                 Some('E') => {new_pos.e = val.unwrap();},
-                _ => {println!("Cannot parse position type {:?}", cap.get(1))}
+                _ => {error!("Cannot parse position type {:?}", cap.get(1))}
             };
         }
         return Ok(new_pos);
+    }
+
+    fn parse_home_cmd(&self, in_str: &str) -> EnumSet<Axis> {
+        const ALL_VALID: EnumSet::<Axis> = enum_set!(Axis::X | Axis::Y | Axis::Z);
+
+        if in_str.trim_end() == "G28" {
+            return ALL_VALID;
+        }
+
+        let mut ret_set = EnumSet::<Axis>::empty();
+
+        for segment in in_str.split(' ') {
+            match segment.to_uppercase().as_str() {
+                "X" => ret_set |= Axis::X,
+                "Y" => ret_set |= Axis::Y,
+                "Z" => ret_set |= Axis::Z,
+                "0" => ret_set |= ALL_VALID,
+                _ => {}
+            }
+        }
+
+        ret_set
     }
 
     fn parse_fan_speed(&self, in_str: &str) -> (u32, f64) {
@@ -102,10 +125,22 @@ impl Marlin {
         for segment in in_str.split(' ') {
             match segment.chars().nth(0) {
                 Some('P') => {
-                    ret_idx = in_str[1..].parse::<u32>().unwrap();
+                    ret_idx = match segment[1..].parse::<u32>() {
+                        Ok(val) => val,
+                        Err(_) => {
+                            error!("Cannot parse Fan index from {}", segment);
+                                0u32
+                            }
+                        }
                 },
                 Some('S') => {
-                    ret_speed = in_str[1..].parse::<f64>().unwrap();
+                    ret_speed = match segment[1..].parse::<f64>() {
+                        Ok(val) => val,
+                        Err(_) => {
+                            error!("Cannot parse Fan speed from {}", segment);
+                            0.
+                        }
+                    };
                     ret_speed /= 255.;
                 },
                 Some(_) | None => {}
@@ -142,7 +177,7 @@ impl SerialProtocol for Marlin {
                     Ok(Response::TEMPERATURE(res, residency)) 
                 }
                 Err(e) => {
-                    println!("Could not parse {}", line);
+                    error!("Could not parse {}", line);
                     Err(e)
                 }
             }
@@ -153,7 +188,7 @@ impl SerialProtocol for Marlin {
                     Ok(Response::POSITION(res))
                 }
                 Err(e) => {
-                    println!("Could not parse {}", line);
+                    error!("Could not parse {}", line);
                     Err(e)
                 }
             }
@@ -177,6 +212,8 @@ impl SerialProtocol for Marlin {
             Some(OutgoingCmd::PositionModeChange(PositionModeCmd::ExtruderOnly(PositionMode::RELATIVE)))
         } else if out_cmd.starts_with("M106") || out_cmd.starts_with("M107") {
             Some(OutgoingCmd::FanSpeedChange(self.parse_fan_speed(out_cmd)))
+        } else if out_cmd.starts_with("G28") {
+            Some(OutgoingCmd::HomeAxes(self.parse_home_cmd(out_cmd)))
         } else {
             None
         }
@@ -214,7 +251,7 @@ impl SerialProtocol for Marlin {
             ProbePoint::CHAMBER => {"M141"}
             ProbePoint::COOLER => {"M143"}
             _ => {
-                println!("Cannot set temperature for {:?}", new_t.to_set);
+                error!("Cannot set temperature for {:?}", new_t.to_set);
                 return Vec::new();
             }
         };
@@ -278,20 +315,20 @@ mod tests {
         let resp = Marlin{}.parse_rx_line(test_line);
 
         assert!(resp.is_ok());
-        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:0, current:22.58, target:0.0},
-            Temperature{measured_from:ProbePoint::BED, index:0, power:0, current:23.11, target:70.0}], None));
+        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:0., current:22.58, target:0.0},
+            Temperature{measured_from:ProbePoint::BED, index:0, power:0., current:23.11, target:70.0}], None));
 
         let test_line = " T:22.67 /66.66 B:23.11 /70.00 @:55 B@:127 W:30  ";
         let resp = Marlin{}.parse_rx_line(test_line);
-        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:55, current:22.67, target:66.66},
-            Temperature{measured_from:ProbePoint::BED, index:0, power:127, current:23.11, target:70.0}], Some(30)));
+        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:0.5, current:22.67, target:66.66},
+            Temperature{measured_from:ProbePoint::BED, index:0, power:1., current:23.11, target:70.0}], Some(30)));
     }
 
     #[test]
     fn parse_temperature_line_no_bed_no_residency() {
         let test_line = "T:22.67 /66.66 @:55";
         let resp = Marlin{}.parse_rx_line(test_line);
-        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:55, current:22.67, target:66.66}], None));
+        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:0.7, current:22.67, target:66.66}], None));
     }
 
     #[test]
@@ -321,6 +358,39 @@ mod tests {
         let test_line = "echo:busy: processing";
         let resp = Marlin{}.parse_rx_line(test_line);
         assert_eq!(resp.unwrap(), Response::BUSY);
+    }
+
+    #[test]
+    fn parse_fan_speed_no_idx() {
+        let test_line = "M106 S255";
+        let (idx, speed) = Marlin{}.parse_fan_speed(test_line);
+
+        assert_eq!(idx, 0);
+        assert_eq!(speed, 1.);
+    }
+
+    #[test]
+    fn parse_fan_speed_with_idx() {
+        let test_line = "M106 P2 S0";
+        let (idx, speed) = Marlin{}.parse_fan_speed(test_line);
+
+        assert_eq!(idx, 2);
+        assert_eq!(speed, 0.);
+    }
+
+    #[test]
+    fn parse_home_cmd() {
+        let mut test_line = "G28 X Z";
+        assert_eq!(Marlin{}.parse_home_cmd(test_line), enum_set!(Axis::Z | Axis::X));
+
+        test_line = "G28 0";
+        assert_eq!(Marlin{}.parse_home_cmd(test_line), enum_set!(Axis::X | Axis::Y | Axis::Z));
+
+        test_line = "G28 ";
+        assert_eq!(Marlin{}.parse_home_cmd(test_line), enum_set!(Axis::X | Axis::Y | Axis::Z));
+
+        test_line = "G28 Y";
+        assert_eq!(Marlin{}.parse_home_cmd(test_line), enum_set!(Axis::Y));
     }
 
     #[test]

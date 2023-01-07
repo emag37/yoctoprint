@@ -89,7 +89,7 @@ impl PrinterControl for Printer {
                 if e.kind() == std::io::ErrorKind::TimedOut {
                     return Ok(Response::NONE);
                 }
-                println!("Got error reading from serial port {} after", e);
+                error!("Got error reading from serial port {} after", e);
                 Err(e)
             }
         }
@@ -128,11 +128,11 @@ impl PrinterControl for Printer {
                 OutgoingCmd::PositionModeChange(mode_change) => {
                     match mode_change {
                         PositionModeCmd::All(m) => {
-                            println!("Position mode for all axes changed to {:?}", m);
+                            info!("Position mode for all axes changed to {:?}", m);
                             self.move_mode_xyz_e = (m,m);
                         },
                         PositionModeCmd::ExtruderOnly(m) => {
-                            println!("Position mode for extruder changed to {:?}", m);
+                            info!("Position mode for extruder changed to {:?}", m);
                             self.move_mode_xyz_e.1 = m;
                         },
                     }
@@ -142,6 +142,9 @@ impl PrinterControl for Printer {
                         self.fan_speeds.resize((idx + 1) as usize, 0.);
                     }
                     self.fan_speeds[idx as usize] = speed;
+                },
+                OutgoingCmd::HomeAxes(axes) => {
+                    self.homed_axes |= axes;
                 }
             }
         }
@@ -289,8 +292,8 @@ impl PrinterControl for Printer {
         if self.state == PrintState::DONE {
             self.transition_state(PrintState::CONNECTED);
         }
-        self.homed_axes |= *axes;
         
+        // The homed axes status of the printer will be updated when we parse the outgoing command
         Ok(())
     }
 
@@ -308,7 +311,7 @@ impl PrinterControl for Printer {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Relative move beyond acceptable range!"));
         }
 
-        println!("Set position to {:?}", new_pos);
+        info!("Set position to {:?}", new_pos);
         for cmd in self.protocol.get_move_cmds(new_pos, self.move_mode_xyz_e) {
             if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
                 return Err(e);
@@ -384,8 +387,9 @@ impl Printer {
         if new_state == self.state {
             return true;
         }
-        println!("Printer state transition: {:?} -> {:?}", self.state, new_state);
-        self.homed_axes = EnumSet::new();
+        info!("Printer state transition: {:?} -> {:?}", self.state, new_state);
+        self.state = new_state;
+
         return true;
     }
 
@@ -444,7 +448,7 @@ impl Printer {
                 }
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::InvalidData {
-                        println!("Ignoring unparseable line. {}", e);
+                        warn!("Ignoring unparseable line. {}", e);
                         continue;
                     }
                     self.transition_state(PrintState::DEAD);
@@ -466,7 +470,7 @@ impl Printer {
 
         for cmd in cmds {
             if let Err(e) = self.send_cmd_read_until_response(cmd.as_str(), None) {
-                println!("Got error: {:?}", e);
+                error!("Got error: {:?}", e);
             }
         }
        
@@ -491,8 +495,8 @@ pub struct SimulatedPrinter {
 
 impl SimulatedPrinter {
     pub fn new() -> Self {
-        let init_temps = vec![Temperature{ measured_from: internal_api::ProbePoint::HOTEND, index: 0, power: 0, current: 25.0, target: 25.0 },
-                                                Temperature{ measured_from: internal_api::ProbePoint::BED, index: 0, power: 0, current: 21.0, target: 21.0 }];
+        let init_temps = vec![Temperature{ measured_from: internal_api::ProbePoint::HOTEND, index: 0, power: 0., current: 25.0, target: 25.0 },
+                                                Temperature{ measured_from: internal_api::ProbePoint::BED, index: 0, power: 0., current: 21.0, target: 21.0 }];
         SimulatedPrinter { to_print: None, state: PrintState::CONNECTED,
             homed_axes:EnumSet::new(), temperatures: init_temps, position: Position::default(), 
             last_line_at: std::time::Instant::now(),
@@ -599,7 +603,6 @@ impl PrinterControl for SimulatedPrinter {
             self.print_timer = PrintTimer::new()
         }
         self.state = PrintState::STARTED;
-        self.homed_axes.clear();
         Ok(())
     }
 
@@ -609,7 +612,6 @@ impl PrinterControl for SimulatedPrinter {
         for temp in &mut self.temperatures {
             temp.target = 0.;
         }
-        self.homed_axes.clear();
         Ok(())
     }
 
