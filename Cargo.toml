@@ -17,6 +17,7 @@ log = "0.4.17"
 simple_logger = "4.0.0"
 assert_approx_eq = "1.1.0"
 clap = {version= "4.0.32", features=["derive"]}
+daemonize = "0.4.1"
 
 [dependencies.rocket]
 version = "0.5.0-rc.2"

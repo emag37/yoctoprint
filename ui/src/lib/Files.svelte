@@ -1,6 +1,6 @@
 <script>
     import {onMount} from 'svelte';
-    import {fetch_api, api_url, status} from '../data';
+    import {fetch_api, api_url, status, send_api_cmd} from '../data';
     import shredderIcon from '../assets/shredder.svg';
     import uploadIcon from '../assets/upload.svg';
 
@@ -58,15 +58,7 @@
 
     function selectFile(filename) {
         filename = `${filename}.gcode`
-        fetch(api_url() + `set_gcode?filename=${filename}`, {method: "POST"})
-        .then(resp => {
-            if(!resp.ok)
-            {
-                return resp.text().then((text) => {
-                    throw new Error(`Error selecting file ${text}`)    
-                });
-            }
-        })
+        send_api_cmd("POST", `set_gcode?filename=${filename}`)
         .catch(err => {
             alert(err);
         }).finally(() => {

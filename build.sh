@@ -23,4 +23,5 @@ cd ..
 mkdir -p ${RELEASE_PKG_DIR}/ui
 cp -r ui/dist ${RELEASE_PKG_DIR}/ui
 cp ${BUILD_DIR}/yoctoprint ${RELEASE_PKG_DIR}/
+cp Rocket.toml ${RELEASE_PKG_DIR}/
 tar -czf ${RELEASE_PKG_DIR}.tar.gz ${RELEASE_PKG_DIR}

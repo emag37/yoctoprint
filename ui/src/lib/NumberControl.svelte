@@ -28,6 +28,7 @@
     border-radius: 10px;
     padding: 10px;
     max-width: fit-content;
+    align-items: center;
 }
 
 .num_adjust > label {

@@ -2,3 +2,4 @@
 .vscode/launch.json
 Cargo.lock
 pkg_arm*
+pkg/*

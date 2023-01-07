@@ -4,6 +4,8 @@ import arrowUp from '../assets/arrow-up-bold-circle.svg';
 import arrowDown from '../assets/arrow-down-bold-circle.svg';
 import arrowLeft from '../assets/arrow-left-bold-circle.svg';
 import arrowRight from '../assets/arrow-right-bold-circle.svg';
+import extrudeIcon from '../assets/extrude.svg';
+import retractIcon from '../assets/retract.svg';
 import NumberControl from './NumberControl.svelte';
 import { send_api_cmd, status } from '../data';
 import { onMount } from 'svelte';
@@ -139,13 +141,18 @@ function setTemperature(id, index, new_temp) {
 
         <div class="title" style="grid-row: 1; grid-column: 7">Tool (E)</div>
         
-        <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 2" on:click={() => move("E", "+")}>Extrude</button>
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 2 on:click={() => move("E", "-")}">
+            <img class="control_button_img" src={retractIcon}  alt="Retract"/>
+        </button>
+
         <div class="feed_adjust">
-            <input type="number" id="feed" min="0.1" max="100" step="0.1" on:change={validateFeed} bind:value={current_feed}>
+            <input type="number" id="feed" min="0.1" max="100" step="1" on:change={validateFeed} bind:value={current_feed}>
             <label for="feed">mm</label>
         </div>
         
-        <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 4 on:click={() => move("E", "-")}">Retract</button>
+        <button disabled={controls_disabled} class="control_button" style="grid-column: 7; grid-row: 4" on:click={() => move("E", "+")}>
+            <img class="control_button_img" src={extrudeIcon}  alt="Extrude"/>
+        </button>
 
         <div class="spacer" style="grid-column: 8"></div>
         <div class="title" style="grid-row: 1; grid-column: 9;">Heater/Fan</div>
@@ -212,7 +219,7 @@ function setTemperature(id, index, new_temp) {
     text-align: center;
     padding-right: 5px;
     flex-basis: 20%;
-    width:75px;
+    max-width: 3em;
 }
 .feed_adjust > label {
     vertical-align: text-bottom;
@@ -227,7 +234,7 @@ function setTemperature(id, index, new_temp) {
 }
 
 .xyz_container {
-    grid-template-columns: repeat(6, auto) auto 10px 200px;
+    grid-template-columns: repeat(7, auto) 10px 200px;
     grid-row: 1;
     grid-column: 1;
     grid-gap: 10px;

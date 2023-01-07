@@ -9,7 +9,7 @@ export function fetch_api(method, path, body = null) {
         'Accept': 'application/json',
         'content-type' : 'application/json'
     },
-    body : body})
+    body : body, keepalive: true})
     .then(resp => resp.json())
 }
 
@@ -19,7 +19,7 @@ export function send_api_cmd(method, path, body = null) {
         'Accept': 'application/json',
         'content-type' : 'application/json'
     },
-    body : body})
+    body : body, keepalive: true})
     .then(refreshStatus)
 }
 

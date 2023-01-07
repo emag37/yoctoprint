@@ -1,11 +1,13 @@
 use std::path::{PathBuf};
 use log::{debug, info, error, warn};
 use std::io::{Error,ErrorKind};
+use std::fs::File;
 use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
 use clap::{Parser, Arg};
+use daemonize::Daemonize;
 
 mod serial;
 mod file;
@@ -132,7 +134,15 @@ struct Args {
 
     // Log level
     #[arg(short, long, default_value="info")]
-    log_level: String
+    log_level: String,
+
+    // Run as a Daemon (fork to background and then exit)
+    #[arg(long)]
+    daemon: bool,
+
+    // If running as a deamon, create this PID file
+    #[arg(long)]
+    pid_file: Option<PathBuf>
 }
 
 fn main() {
@@ -154,6 +164,29 @@ fn main() {
     info!("Yoctoprint starting!");
 
     let base_dir = init_base_dir().unwrap();
+    if args.daemon {
+        let stdout = File::create(base_dir.join("daemon.log")).unwrap();
+        let stderr = File::create(base_dir.join("daemon.err")).unwrap();
+    
+        let daemonize = Daemonize::new()
+            .pid_file(args.pid_file.unwrap_or(base_dir.join("daemon.pid"))) // Every method except `new` and `start`
+            .chown_pid_file(true)      // is optional, see `Daemonize` documentation
+            .working_directory(base_dir.clone()) // for default behaviour.
+            .user("nobody")
+            .group("daemon") // Group name
+            .group(2)        // or group id.
+            .umask(0o777)    // Set umask, `0o027` by default.
+            .stdout(stdout)  // Redirect stdout to `/tmp/daemon.out`.
+            .stderr(stderr)  // Redirect stderr to `/tmp/daemon.err`.
+            .exit_action(|| println!("Executed before master process exits"))
+            .privileged_action(|| "Executed before drop privileges");
+    
+        match daemonize.start() {
+            Ok(_) => println!("Success, daemonized"),
+            Err(e) => eprintln!("Error, {}", e),
+        }
+    }
+
     init_gcode_dir(&base_dir).unwrap();
 
     let (they_send, we_recv) = crossbeam::channel::unbounded();
