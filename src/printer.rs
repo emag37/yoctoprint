@@ -123,32 +123,6 @@ impl PrinterControl for Printer {
             return Ok(());
         }
 
-        if let Some(tapped_cmd) = self.protocol.parse_outgoing_cmd(&cmd) {
-           match tapped_cmd {
-                OutgoingCmd::PositionModeChange(mode_change) => {
-                    match mode_change {
-                        PositionModeCmd::All(m) => {
-                            info!("Position mode for all axes changed to {:?}", m);
-                            self.move_mode_xyz_e = (m,m);
-                        },
-                        PositionModeCmd::ExtruderOnly(m) => {
-                            info!("Position mode for extruder changed to {:?}", m);
-                            self.move_mode_xyz_e.1 = m;
-                        },
-                    }
-                },
-                OutgoingCmd::FanSpeedChange((idx, speed)) => {
-                    if idx as usize >= self.fan_speeds.len() {
-                        self.fan_speeds.resize((idx + 1) as usize, 0.);
-                    }
-                    self.fan_speeds[idx as usize] = speed;
-                },
-                OutgoingCmd::HomeAxes(axes) => {
-                    self.homed_axes |= axes;
-                }
-            }
-        }
-
         self.send_cmd_read_until_response(&cmd, Some(next_line_no))
         
     }
@@ -408,6 +382,32 @@ impl Printer {
     fn send_cmd_read_until_response(&mut self, cmd: &str, line_no: Option<u32>) -> std::io::Result<()> {
         debug!("Send command: {}", cmd);
         
+        if let Some(tapped_cmd) = self.protocol.parse_outgoing_cmd(&cmd) {
+            match tapped_cmd {
+                OutgoingCmd::PositionModeChange(mode_change) => {
+                    match mode_change {
+                        PositionModeCmd::All(m) => {
+                            info!("Position mode for all axes changed to {:?}", m);
+                            self.move_mode_xyz_e = (m,m);
+                        },
+                        PositionModeCmd::ExtruderOnly(m) => {
+                            info!("Position mode for extruder changed to {:?}", m);
+                            self.move_mode_xyz_e.1 = m;
+                        },
+                    }
+                },
+                OutgoingCmd::FanSpeedChange((idx, speed)) => {
+                    if idx as usize >= self.fan_speeds.len() {
+                        self.fan_speeds.resize((idx + 1) as usize, 0.);
+                    }
+                    self.fan_speeds[idx as usize] = speed;
+                },
+                OutgoingCmd::HomeAxes(axes) => {
+                    self.homed_axes |= axes;
+                }
+            }
+        }
+ 
         let to_send = 
         match line_no {
             Some(no) => {self.protocol.add_message_frame(no, cmd)}

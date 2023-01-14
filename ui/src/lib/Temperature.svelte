@@ -32,7 +32,7 @@ onDestroy(unsubscribe);
                 <label class="digital" for="current_temp">Target: {temperature.target}ºC</label>
                 
                 <meter id="power" class="meter" value={temperature.power} min="0" max="100"/>
-                <label class="digital" for="power">Power: {temperature.power * 100}%</label>
+                <label class="digital" for="power">Power: {(temperature.power * 100).toFixed(0)}%</label>
         </div>
     </div>
     {/each}

@@ -92,34 +92,39 @@ impl PrintDurationEstimator{
         }
     }
 
-    pub fn get_remaining_time(&self, cur_line_in_file: u32, cur_time_secs: Duration) -> Duration {
-        if cur_line_in_file > self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow()].0 {
+    pub fn get_remaining_time(&self, cur_line_in_file: u32, cur_t: Duration) -> Duration {
+        // Increment the index until the timepoint is after the current line
+        while cur_line_in_file > self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow()].0 && *self.this_line_no_elapsed_idx.borrow() < self.line_no_elapsed.len() {
             *self.this_line_no_elapsed_idx.borrow_mut() += 1;
+        }
+
+        if *self.this_line_no_elapsed_idx.borrow() == self.line_no_elapsed.len() { // We're past the end - we should be done!
+            return Duration::ZERO;
         }
         const ZERO: (u32, Duration) = (0u32, Duration::ZERO);
 
-        let (prev_elapsed_idx, prev_elapsed_tp) = if *self.this_line_no_elapsed_idx.borrow() == 0 {&ZERO} else {&self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow() - 1]};
-        let (next_elapsed_idx, next_elapsed_tp) = &self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow()];
+        // Find the slope of T1,L1 and T2,L2 and interpolate the current position
+        let (l1, t1) = if *self.this_line_no_elapsed_idx.borrow() == 0 {&ZERO} else {&self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow() - 1]};
+        let (l2, t2) = &self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow()];
 
-        let expected_t = (next_elapsed_tp.saturating_sub(*prev_elapsed_tp))
-                                    .div(*next_elapsed_idx - *prev_elapsed_idx)
-                                    .mul(cur_line_in_file);
+        let slope = (t2.saturating_sub(*t1).as_secs_f64())
+                                    .div((*l2 - *l1) as f64);
+        let intercept = t2.as_secs_f64() - slope * (*l2 as f64);
 
-        let end_t = self.line_no_elapsed.last().unwrap().1;
+        // Find the expected time point based on the interpolation
+        let expected_t = Duration::from_secs_f64(slope * (cur_line_in_file as f64) + intercept);
 
-        if cur_time_secs >= end_t {
-            return Duration::ZERO;
-        }
-        
-        let mut remaining = end_t - cur_time_secs;
-        
-        if cur_time_secs >= expected_t {
-            remaining = remaining.add(cur_time_secs.sub(expected_t));
+        let mut remaining_t = self.line_no_elapsed.last().unwrap().1 - expected_t;
+
+        if cur_t >= expected_t {
+            // We're late - add the lateness to the remaining time
+            remaining_t = remaining_t.add(cur_t.sub(expected_t));
         } else {
-            remaining = remaining.sub(expected_t.sub(cur_time_secs));
+            // We're early! Subtract the earliness from the remaining time
+            remaining_t = remaining_t.saturating_sub(expected_t.sub(cur_t));
         }
 
-        return remaining;
+        return remaining_t;
     }
 
     pub fn get_last_time_point_duration(&self) -> (u32, Duration){
@@ -270,8 +275,8 @@ mod tests {
         estimator.add_time_point(180., 2000);
         estimator.add_time_point(312., 3676);
 
-        let rem = estimator.get_remaining_time(3500, Duration::from_secs(212));
-        assert_approx_eq!(rem.as_secs_f64(), 36.3437, EPSILON);
+        let rem = estimator.get_remaining_time(3500, Duration::from_secs(296));
+        assert_approx_eq!(rem.as_secs_f64(), 11.72, EPSILON);
     }
 
     #[test]
@@ -290,8 +295,18 @@ mod tests {
         estimator.add_time_point(180., 2000);
         estimator.add_time_point(312., 3676);
 
-        let rem = estimator.get_remaining_time(3500, Duration::from_secs(250));
-        assert!(rem.as_secs_f64() < 312. - 250.);
+        let rem = estimator.get_remaining_time(3500, Duration::from_secs(290));
+        assert!(rem.as_secs_f64() < 312. - 290.);
+    }
+
+    #[test]
+    fn estimator_two_time_points_way_faster() {
+        let mut estimator = PrintDurationEstimator::new();
+        estimator.add_time_point(180., 2000);
+        estimator.add_time_point(312., 3676);
+
+        let rem = estimator.get_remaining_time(3500, Duration::from_secs(200));
+        assert!(rem == Duration::ZERO);
     }
 
     #[test]
@@ -302,5 +317,20 @@ mod tests {
 
         let rem = estimator.get_remaining_time(3500, Duration::from_secs(320));
         assert!(rem.as_secs_f64() < 312. - 250.);
+    }
+
+    #[test]
+    fn estimator_real_file() {
+        
+        let mut file = GCodeFile::new(&std::env::current_dir().unwrap().join(Path::new("samples/PSME_cane-clip-2.gcode"))).expect("Cannot open sample file!");
+        
+        while file.get_progress().0 < 223400 {
+            let _ = file.next_line().unwrap();
+            
+        }
+        let remaining = file.get_remaining_time(Duration::from_secs(7792)).unwrap();
+
+        assert_approx_eq!(remaining.as_secs_f64(), 60.45, EPSILON);
+        println!("{:?}", remaining);
     }
 }
