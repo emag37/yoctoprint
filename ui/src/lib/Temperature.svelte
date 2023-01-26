@@ -12,6 +12,7 @@ const unsubscribe = status.subscribe(new_status => {
             temp.target_high = temp.target + 5;
             temp.current = temp.current.toFixed(2);
             temp.target = temp.target.toFixed(2);
+            temp.power = (temp.power * 100.).toFixed(0);
         }
     }
 });
@@ -32,7 +33,7 @@ onDestroy(unsubscribe);
                 <label class="digital" for="current_temp">Target: {temperature.target}ºC</label>
                 
                 <meter id="power" class="meter" value={temperature.power} min="0" max="100"/>
-                <label class="digital" for="power">Power: {(temperature.power * 100).toFixed(0)}%</label>
+                <label class="digital" for="power">Power: {temperature.power}%</label>
         </div>
     </div>
     {/each}
