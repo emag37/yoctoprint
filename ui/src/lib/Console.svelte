@@ -1,12 +1,14 @@
 <script>
-    import { api_url } from '../data';
+    import { api_url, server_addr, status } from '../data';
     import { onMount } from 'svelte';
+    import { tick } from 'svelte';
 
     const bufferDepth = 500;
 
     let socket = null;
     let inputText = "";
     let textLines = [];
+    let textArea = null;
 
     onMount(()=>{
         openConsole();
@@ -22,7 +24,7 @@
         .then(resp => {
             return resp.text()
         }).then(port_str => {
-            socket = new WebSocket(`ws://${window.location.hostname}:${port_str}`); 
+            socket = new WebSocket(`ws://${server_addr}:${port_str}`); 
             socket.onmessage = (msg_json) => {
                 let msg = JSON.parse(msg_json.data);
                 if (msg.is_echo) {
@@ -32,7 +34,16 @@
                 while(textLines.length > bufferDepth) {
                     textLines.shift();
                 }
-                textLines = textLines;
+                textLines = textLines; // Svelte pls.
+                
+                const wasBottom = textArea.scrollHeight === textArea.clientHeight || textArea.scrollTop + textArea.clientHeight === textArea.scrollHeight;
+
+                if (wasBottom) {
+                    tick().then(() => {
+                        textArea.scrollTop = textArea.scrollHeight - textArea.clientHeight;
+                    });
+                    
+                }
             }
         })
         .catch(err => {
@@ -43,10 +54,10 @@
 </script>
 
 <div class="console_container">
-    <textarea cols=50 rows=10 readonly="true" overflow="auto" class="output">{textLines.join("\n")}</textarea>
+    <textarea cols=50 rows=10 readonly="true" overflow="auto" class="output" bind:this={textArea}>{textLines.join("")}</textarea>
 
     <input class="input" type="text" bind:value="{inputText}"/>
-    <button class="send" disabled={socket == null || socket.readyState != 1 || inputText.length === 0} on:click={sendInput}>Send</button>
+    <button class="send" disabled={$status.state == "STARTED" || socket == null || socket.readyState != 1 || inputText.length === 0} on:click={sendInput}>Send</button>
 </div>
 
 <style>

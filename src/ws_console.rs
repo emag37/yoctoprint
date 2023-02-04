@@ -68,17 +68,21 @@ impl ws::Handler for ConsoleHandler {
     fn on_timeout(&mut self, event: ws::util::Token) -> ws::Result<()> {
         match event {
             WSConsole::CHECK_RX => {
-                match self.to_from_printer.1.try_recv() {
-                    Ok(msg) => {
-                        let as_json = rocket::serde::json::to_string(&msg).unwrap();
-                        if let Err(e) = self.out.send(as_json) {
-                            error!("Error sending message: {}", e);
+                loop {
+                    match self.to_from_printer.1.try_recv() {
+                        Ok(msg) => {
+                            let as_json = rocket::serde::json::to_string(&msg).unwrap();
+                            if let Err(e) = self.out.send(as_json) {
+                                error!("Error sending message: {}", e);
+                            }
                         }
-                    }
-                    Err(e) => {
-                        if e.is_disconnected() {
-                            if let Err(e) = self.out.close(ws::CloseCode::Normal) {
-                                error!("Error closing websocket: {}", e);
+                        Err(e) => {
+                            if e.is_disconnected() {
+                                if let Err(e) = self.out.close(ws::CloseCode::Normal) {
+                                    error!("Error closing websocket: {}", e);
+                                }
+                            } else {
+                                break;
                             }
                         }
                     }

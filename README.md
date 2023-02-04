@@ -10,3 +10,6 @@ Yoctoprint is my own minimalist version written in Rust to get that sweet native
 
 ## Building
 Run the `./build.sh` script. I have it set up for a cross-build with a Yocto SDK with `./build.sh arm` or an x86 build with `./build.sh`.
+
+## Can I Use This?
+YJust because you can doesn't mean you should. I have only tested it with my Printrbot Simple Metal running Marlin 2, and it lacks most of the safety/security features that Octoprint has. That being said, feel free to give it a whack, but please don't stray too far from your printer.
