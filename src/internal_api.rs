@@ -2,6 +2,7 @@ use crate::PathBuf;
 use rocket::serde::{Serialize};
 use serde::Deserialize;
 use enumset::{EnumSetType, EnumSet};
+use crossbeam::channel::{Sender, Receiver};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileInfo {
@@ -111,10 +112,20 @@ pub enum PrinterCommand {
     ManualMove(Position),
     Home(EnumSet<Axis>),
     SetTemperature(TemperatureTarget),
-    SetFanSpeed((u32, f64))
+    SetFanSpeed((u32, f64)),
+    OpenConsole
+}
+
+#[derive(Clone, Debug)]
+#[derive(PartialEq)]
+#[derive(Serialize, Deserialize)]
+pub struct ConsoleMessage {
+    pub is_echo: bool,
+    pub line: String
 }
 
 pub enum PrinterResponse {
     GenericResult(std::io::Result<()>),
     Status(std::io::Result<PrinterStatus>),
+    ConsoleChannel((Sender<ConsoleMessage>, Receiver<ConsoleMessage>))
 }

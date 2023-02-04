@@ -1,11 +1,13 @@
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crossbeam::channel::{Sender, Receiver, RecvError};
 use rocket::data::ByteUnit;
 use rocket::{State,Data, Request};
 use crate::internal_api;
 use crate::file;
+use crate::ws_console::WSConsole;
 use internal_api::*;
 use rocket::serde::json::{Json};
 use rocket::serde::{Serialize,Deserialize};
@@ -16,6 +18,10 @@ use rocket::fs::{NamedFile};
 struct InternalComms {
     to_internal: Sender<PrinterCommand>,
     from_internal: Receiver<PrinterResponse>
+}
+
+struct WSConsoleState {
+    console: Mutex<Option<WSConsole>>
 }
 
 struct WebUiDir(PathBuf);
@@ -245,6 +251,24 @@ fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureT
     resp_generic_result_or_err(comms.from_internal.recv())
 }
 
+#[post("/open_console")]
+fn open_console(comms: &State<InternalComms>, console_state: &State<WSConsoleState>) -> Result<String, ApiError> {
+    if let Err(e) = comms.to_internal.send(PrinterCommand::OpenConsole) {
+        return Err(crossbeam_err_to_io_err(e));
+    }
+
+    match comms.from_internal.recv() {
+        Ok(PrinterResponse::ConsoleChannel(channels)) => {  
+            let new_console = WSConsole::new(channels);
+            let port = new_console.port();
+            *console_state.console.lock().unwrap() = Some(new_console);
+            Ok(port.to_string())
+        }
+        Ok(_) => Err(ApiError(Error::new(ErrorKind::InvalidInput, "Got wrong response type for open console!"))),
+        Err(e) => Err(crossbeam_err_to_io_err(e))
+    }
+}
+
 #[get("/")]
 async fn index(webui_dir: &State<WebUiDir>) -> std::option::Option<NamedFile> {
     info!("Current dir: {:?}. Index: {:?}", std::env::current_dir(), webui_dir.0.as_path().join("index.html"));
@@ -272,9 +296,10 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
     let cors = CorsOptions::default().to_cors().unwrap();
 
     let api_rocket = rocket::build()
-    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature, set_fan_speed])
+    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature, set_fan_speed, open_console])
     .mount("/", routes![index, serve_file])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
+    .manage(WSConsoleState{console: Mutex::new(None)})
     .manage(data_dir as DataDir)
     .manage(WebUiDir(webui_dir))
     .attach(cors);

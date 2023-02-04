@@ -1,4 +1,5 @@
 use crate::internal_api::Axis;
+use crate::internal_api::ConsoleMessage;
 use crate::internal_api::Position;
 use crate::internal_api::Temperature;
 use crate::internal_api::TemperatureTarget;
@@ -10,6 +11,7 @@ use crate::marlin;
 use std::ops::Div;
 use std::time::Duration;
 use std::vec;
+use crossbeam::channel::{Sender, Receiver};
 use serial::*;
 use internal_api::PrintState;
 use std::io::Error;
@@ -20,8 +22,7 @@ use enumset::{EnumSet,enum_set};
 pub trait PrinterControl {
     fn read_from_printer(&mut self) -> std::io::Result<Response>;
     fn send_to_printer(&mut self, data: &str) -> std::io::Result<usize>;
-    fn print_next_line(&mut self) -> std::io::Result<()>;
-    fn poll_new_status(&mut self);
+    fn next_action(&mut self) -> Result<()>;
     fn get_status(&self) -> Result<internal_api::PrinterStatus>;
     fn get_state(&self) -> PrintState;
     fn set_gcode_file(&mut self, abs_path: &PathBuf) -> Result<()>;
@@ -32,6 +33,7 @@ pub trait PrinterControl {
     fn move_relative(&mut self, new_pos: &Position) -> Result<()>;
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()>;
     fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()>;
+    fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>);
 }
 
 struct PrintTimer {
@@ -60,6 +62,85 @@ impl PrintTimer {
         self.duration
     }
 }
+
+struct ExternalConsole {
+    rx_out: Sender<ConsoleMessage>,
+    tx_in: Receiver<ConsoleMessage>,
+
+    pending_external_channels: Option<(Sender<ConsoleMessage>, Receiver<ConsoleMessage>)>,
+    is_connected: bool,
+}
+
+impl ExternalConsole {
+    const BUF_SIZE : usize = 256;
+
+    pub fn new() -> ExternalConsole {
+        let (rx_out, rx_in) = crossbeam::channel::bounded::<ConsoleMessage>(ExternalConsole::BUF_SIZE);
+        let (tx_out, tx_in) = crossbeam::channel::bounded::<ConsoleMessage>(ExternalConsole::BUF_SIZE);
+
+        return ExternalConsole{rx_out: rx_out, tx_in: tx_in, pending_external_channels: Some((tx_out, rx_in)),is_connected: false};
+    }  
+
+    pub fn is_connected(&self) -> bool {
+        return self.is_connected;
+    }
+
+    pub fn get_ext_channels(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>) {
+        if self.is_connected {
+            warn!("Replacing connected external console channels.");
+        }
+        
+        let ext_channels = match self.pending_external_channels.take() {
+            Some(channels) => {
+                let ret_channels = channels;
+                self.pending_external_channels = None;
+                ret_channels
+            }
+            None => {
+                let (rx_out, rx_in) = crossbeam::channel::bounded::<ConsoleMessage>(ExternalConsole::BUF_SIZE);
+                let (tx_out, tx_in) = crossbeam::channel::bounded::<ConsoleMessage>(ExternalConsole::BUF_SIZE);
+                self.rx_out = rx_out;
+                self.tx_in = tx_in;
+                (tx_out, rx_in)
+            }
+        };
+        self.is_connected = true;
+        return ext_channels;
+    }
+
+    pub fn send_rx(&mut self, msg: String, is_echo: bool) {
+        if !self.is_connected {
+            return;
+        }
+
+        match self.rx_out.try_send(ConsoleMessage{line:msg, is_echo:is_echo}) {
+            // Drop any message we don't have room for
+            Err(e) => {
+                if e.is_disconnected() {
+                    self.is_connected = false;
+                }
+            }
+            Ok(()) => {}
+        }
+    }
+
+    pub fn get_tx(&mut self) -> Option<String> {
+        if !self.is_connected {
+            return None;
+        }
+        
+        match self.tx_in.try_recv() {
+            Err(e) => {
+                if e.is_disconnected() {
+                    self.is_connected = false;
+                }
+                None
+            }
+            Ok(msg) => Some(msg.line)
+        }
+    }
+}
+
 pub struct Printer {
     pub comms: serial::PrinterComms,
     pub protocol: Box<dyn SerialProtocol>,
@@ -71,7 +152,8 @@ pub struct Printer {
     state: PrintState,
     is_busy: bool,
     print_timer: PrintTimer,
-    fan_speeds: Vec<f64>
+    fan_speeds: Vec<f64>,
+    external_console: ExternalConsole
 }
 
 impl PrinterControl for Printer {
@@ -83,7 +165,8 @@ impl PrinterControl for Printer {
                 if n_read == 0 { 
                     return Ok(Response::NONE);
                 }
-
+                
+                self.external_console.send_rx(read_str.clone(), false);
                 return self.protocol.parse_rx_line(&read_str);
             } Err(e) => {
                 if e.kind() == std::io::ErrorKind::TimedOut {
@@ -96,59 +179,10 @@ impl PrinterControl for Printer {
     }
 
     fn send_to_printer(&mut self, data: &str) -> std::io::Result<usize> {
-        self.comms.port.get_mut().write(format!("{}{}", data.trim_end(), '\n').as_bytes())
-    }
+        let to_write = format!("{}{}", data.trim_end(), '\n');
 
-    
-    fn print_next_line(&mut self) -> std::io::Result<()> {
-        self.print_timer.update();
-        
-        if self.is_busy {
-            self.poll_new_status();
-            return Ok(())
-        }
-
-        if self.state != PrintState::STARTED {
-            return Err(Error::new(std::io::ErrorKind::NotFound, format!("Printer is not in {:?} state ({:?})!", PrintState::STARTED, self.state)));
-        }
-        
-        let (next_line_no, cmd) = 
-        match self.to_print.as_mut().unwrap().next_line() {
-            Ok(line) => {(line.0, line.1.to_owned())}
-            Err(e) => {return Err(e);}
-        };
-
-        if cmd.len() == 0 {
-            self.transition_state(PrintState::DONE);
-            return Ok(());
-        }
-
-        self.send_cmd_read_until_response(&cmd, Some(next_line_no))
-        
-    }
-
-    fn poll_new_status(&mut self) {
-        loop {
-            match self.read_from_printer() {
-                Ok(resp) => {
-                    match resp {
-                        serial::Response::BUSY => {
-                            self.is_busy = true;
-                            break;
-                        }
-                        serial::Response::OK => {
-                            self.is_busy = false;
-                            break;
-                        }
-                        serial::Response::NONE => {break;}
-                        _ => {self.update_status_from_response(&resp);}
-                    }
-                }
-                Err(e) => {
-                    break;
-                }
-            }
-        }
+        self.external_console.send_rx(to_write.clone(), true);
+        self.comms.port.get_mut().write(to_write.as_bytes())
     }
 
     fn get_status(&self) -> Result<internal_api::PrinterStatus>{
@@ -331,6 +365,29 @@ impl PrinterControl for Printer {
             
         Ok(())
     }
+
+    fn next_action(&mut self) -> Result<()> {
+        match self.external_console.get_tx() {
+            Some(line) => {
+                info!("Sending external command: {}", line);
+                if let Err(e) = self.send_cmd_read_until_response(&line, None) {
+                    error!("Error sending command {}", line);
+                }
+            }
+            None => {}
+        }
+        
+        if self.state == PrintState::STARTED {
+            return self.print_next_line();
+        } else {
+            self.poll_new_status();
+            Ok(())
+        }
+    }
+
+    fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>) {
+        self.external_console.get_ext_channels()
+    }
 }
 
 impl Printer {
@@ -341,7 +398,7 @@ impl Printer {
                 homed_axes:EnumSet::new(), temperatures: Vec::new(), position: Position::default(),
                 move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false,
                 print_timer: PrintTimer::new(),
-                fan_speeds: vec![0.]};
+                fan_speeds: vec![0.], external_console: ExternalConsole::new()};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
@@ -355,6 +412,57 @@ impl Printer {
         }
             
         return Err(Error::new(std::io::ErrorKind::InvalidData, "Cannot find firmware type"));
+    }
+
+    fn print_next_line(&mut self) -> std::io::Result<()> {
+        self.print_timer.update();
+        
+        if self.is_busy {
+            self.poll_new_status();
+            return Ok(())
+        }
+
+        if self.state != PrintState::STARTED {
+            return Err(Error::new(std::io::ErrorKind::NotFound, format!("Printer is not in {:?} state ({:?})!", PrintState::STARTED, self.state)));
+        }
+        
+        let (next_line_no, cmd) = 
+        match self.to_print.as_mut().unwrap().next_line() {
+            Ok(line) => {(line.0, line.1.to_owned())}
+            Err(e) => {return Err(e);}
+        };
+
+        if cmd.len() == 0 {
+            self.transition_state(PrintState::DONE);
+            return Ok(());
+        }
+
+        self.send_cmd_read_until_response(&cmd, Some(next_line_no))
+        
+    }
+
+    fn poll_new_status(&mut self) {
+        loop {
+            match self.read_from_printer() {
+                Ok(resp) => {
+                    match resp {
+                        serial::Response::BUSY => {
+                            self.is_busy = true;
+                            break;
+                        }
+                        serial::Response::OK => {
+                            self.is_busy = false;
+                            break;
+                        }
+                        serial::Response::NONE => {break;}
+                        _ => {self.update_status_from_response(&resp);}
+                    }
+                }
+                Err(e) => {
+                    break;
+                }
+            }
+        }
     }
 
     fn transition_state(&mut self, new_state: PrintState) -> bool {
@@ -489,7 +597,8 @@ pub struct SimulatedPrinter {
     last_temp_update: std::time::Instant,
     print_timer: PrintTimer,
     gcode_send_interval:std::time::Duration,
-    fan_speeds: Vec<f64>
+    fan_speeds: Vec<f64>,
+    external_console : ExternalConsole
 }
 
 
@@ -503,7 +612,8 @@ impl SimulatedPrinter {
             last_temp_update: std::time::Instant::now(),
             print_timer: PrintTimer::new(),
             gcode_send_interval: Duration::ZERO,
-            fan_speeds: vec![0.]
+            fan_speeds: vec![0.],
+            external_console: ExternalConsole::new()
         }
     }
 }
@@ -517,11 +627,19 @@ impl PrinterControl for SimulatedPrinter {
         Ok(data.len())
     }
 
-    fn print_next_line(&mut self) -> std::io::Result<()> {
+    fn next_action(&mut self) -> std::io::Result<()> {
+        // Check for external console commands
+
+        match self.external_console.get_tx() {
+            Some(line) => {
+                println!("Send to printer: {}", line);
+                self.external_console.send_rx(line, true);
+            },
+            None => {}
+        }
+        // Send next line
         self.print_timer.update();
-        if self.to_print.is_none() {
-            return Err(Error::new(std::io::ErrorKind::NotFound, "No printer"));
-        } else if std::time::Instant::now() - self.last_line_at >= self.gcode_send_interval {
+        if !self.to_print.is_none() && std::time::Instant::now() - self.last_line_at >= self.gcode_send_interval {
             let mut to_print = self.to_print.as_mut().unwrap();
 
             if to_print.cur_line_in_file < to_print.line_count {
@@ -531,23 +649,21 @@ impl PrinterControl for SimulatedPrinter {
             }
             self.last_line_at = std::time::Instant::now();
         }
-        Ok(())
-    }
 
-    fn poll_new_status(&mut self) {
-        if std::time::Instant::now() - self.last_temp_update < std::time::Duration::from_millis(750) {
-            return;
-        }
-
-        for temp in &mut self.temperatures {
-            let adjust = 0.5 + rand::random::<f64>() * 0.75;
-            if temp.current < temp.target {
-                temp.current += adjust;
-            } else {
-                temp.current -= adjust;
+        // Update status
+        if std::time::Instant::now() - self.last_temp_update >= std::time::Duration::from_millis(750) {
+            for temp in &mut self.temperatures {
+                let adjust = 0.5 + rand::random::<f64>() * 0.75;
+                if temp.current < temp.target {
+                    temp.current += adjust;
+                } else {
+                    temp.current -= adjust;
+                }
             }
+            self.last_temp_update = std::time::Instant::now();
         }
-        self.last_temp_update = std::time::Instant::now();
+
+        Ok(())
     }
 
     fn get_status(&self) -> Result<internal_api::PrinterStatus> {
@@ -648,5 +764,9 @@ impl PrinterControl for SimulatedPrinter {
 
         self.fan_speeds[vec_idx] = speed;
         Ok(())
+    }
+
+    fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>) {
+        self.external_console.get_ext_channels()
     }
 }

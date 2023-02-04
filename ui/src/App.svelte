@@ -1,6 +1,7 @@
 <script>
   import { writable, get } from 'svelte/store';
   import { status } from "./data";
+  import Console from './lib/Console.svelte'
   import Control from './lib/Control.svelte'
   import Temperature from './lib/Temperature.svelte';
   import Files from './lib/Files.svelte';
@@ -38,7 +39,10 @@
         <div class="files">
           <Files />
         </div>
-        <Temperature />  
+        <Temperature />
+      </div>
+      <div>
+        <Console />
       </div>
     </div>
   </Modal>

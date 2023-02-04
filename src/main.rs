@@ -16,6 +16,7 @@ mod internal_api;
 mod printer;
 mod marlin;
 mod interval_timer;
+mod ws_console;
 
 fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
     if printer.is_none() {
@@ -95,6 +96,9 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
         PrinterCommand::SetFanSpeed((index, speed)) => {
             return PrinterResponse::GenericResult(printer_ref.set_fan_speed(*index, *speed));
         }
+        PrinterCommand::OpenConsole => {
+            return PrinterResponse::ConsoleChannel(printer_ref.create_external_console());
+        },
     }
 }
 
@@ -198,11 +202,7 @@ fn main() {
         }
 
         if let Some(ref mut cur_printer) = printer {
-            if cur_printer.get_state() == PrintState::STARTED {
-                cur_printer.print_next_line();
-            } else {
-                cur_printer.poll_new_status();
-            }
+           cur_printer.next_action().expect("Error performing next printer action!");
         } else if scan_timer.check() {
             info!("Looking for printer...");
             if let Ok(found) = serial::find_printer() {
