@@ -1,6 +1,6 @@
 use crate::internal_api::ConsoleMessage;
 
-use crossbeam::channel::{Sender, Receiver, RecvError};
+use crossbeam::channel::{Sender, Receiver};
 use std::sync::Arc;
 
 struct ConsoleFactory {
@@ -110,7 +110,7 @@ impl WSConsole {
             });
             WSConsole { worker_handle: handle, port: port }
     }
-
+    
     pub fn is_open(&self) -> bool {
         return !self.worker_handle.is_finished();
     }

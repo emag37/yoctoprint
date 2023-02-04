@@ -371,7 +371,7 @@ impl PrinterControl for Printer {
             Some(line) => {
                 info!("Sending external command: {}", line);
                 if let Err(e) = self.send_cmd_read_until_response(&line, None) {
-                    error!("Error sending command {}", line);
+                    error!("Error sending command {} - {}", line, e);
                 }
             }
             None => {}
@@ -402,7 +402,7 @@ impl Printer {
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
-                        return Err(Error::new(std::io::ErrorKind::InvalidData, "Error probing initial temperatures."));
+                        return Err(Error::new(std::io::ErrorKind::InvalidData, format!("Error probing initial temperatures: {e}")));
                     }
                 }
                 return Ok(ret_printer);
@@ -477,7 +477,7 @@ impl Printer {
 
     fn update_status_from_response(&mut self, resp: &serial::Response) {
         match resp {
-            serial::Response::TEMPERATURE(temp, residency)  => {
+            serial::Response::TEMPERATURE(temp, _residency)  => {
                 self.temperatures = temp.clone();
             }
             serial::Response::POSITION(pos) => {
@@ -742,7 +742,7 @@ impl PrinterControl for SimulatedPrinter {
         Ok(())
     }
 
-    fn move_relative(&mut self, new_pos: &Position) -> Result<()> {
+    fn move_relative(&mut self, _new_pos: &Position) -> Result<()> {
         Ok(())
     }
 

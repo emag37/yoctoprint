@@ -1,10 +1,10 @@
 use std::io::{BufReader, BufRead, Seek, Read};
-use std::ops::{Div, Add, Mul, Sub};
+use std::ops::{Div, Add, Sub};
 use std::str::FromStr;
 use std::vec::Vec;
 use std::path::{Path,PathBuf};
 use std::fs::{File};
-use log::{debug, info, error, warn};
+use log::{debug, info};
 use std::cell::RefCell;
 use std::time::Duration;
 

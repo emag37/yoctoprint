@@ -188,10 +188,6 @@ impl PrinterComms {
         Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "Timed out waiting for printer to reply!"))
     }
 
-    pub fn path(&self) -> String {
-        return self.port.get_ref().name().unwrap_or(String::new());
-    }
-
 }
 
 pub fn find_printer() -> std::io::Result<PrinterComms> {
