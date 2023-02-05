@@ -320,7 +320,7 @@ mod tests {
 
         let test_line = " T:22.67 /66.66 B:23.11 /70.00 @:55 B@:127 W:30  ";
         let resp = Marlin{}.parse_rx_line(test_line);
-        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:0.5, current:22.67, target:66.66},
+        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:(55./127.), current:22.67, target:66.66},
             Temperature{measured_from:ProbePoint::BED, index:0, power:1., current:23.11, target:70.0}], Some(30)));
     }
 
@@ -328,7 +328,7 @@ mod tests {
     fn parse_temperature_line_no_bed_no_residency() {
         let test_line = "T:22.67 /66.66 @:55";
         let resp = Marlin{}.parse_rx_line(test_line);
-        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:0.7, current:22.67, target:66.66}], None));
+        assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:(55./127.), current:22.67, target:66.66}], None));
     }
 
     #[test]

@@ -52,7 +52,7 @@ impl ws::Handler for ConsoleHandler {
             Err(e) => {
                 if e.is_disconnected() {
                     if let Err(e) = self.out.close(ws::CloseCode::Normal) {
-                        error!("Error closing websocket: {}", e);
+                        error!("Error, closing websocket: {}", e);
                     }
                 }
             }
@@ -81,9 +81,8 @@ impl ws::Handler for ConsoleHandler {
                                 if let Err(e) = self.out.close(ws::CloseCode::Normal) {
                                     error!("Error closing websocket: {}", e);
                                 }
-                            } else {
-                                break;
                             }
+                            break;
                         }
                     }
                 }
