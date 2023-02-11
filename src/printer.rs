@@ -200,7 +200,7 @@ impl PrinterControl for Printer {
             temperatures: self.temperatures.clone(), 
             position: self.position, 
             gcode_lines_done_total: match &self.to_print {
-                Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
+                Some(p) => {Some((p.name().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
             },
             print_time_remaining: time_remaining,
@@ -421,7 +421,11 @@ impl Printer {
             self.poll_new_status();
             return Ok(())
         }
-
+        
+        if self.to_print.is_none() {
+            self.transition_state(PrintState::DEAD);
+            return Err(Error::new(std::io::ErrorKind::NotFound, "No file to print!"));
+        }
         if self.state != PrintState::STARTED {
             return Err(Error::new(std::io::ErrorKind::NotFound, format!("Printer is not in {:?} state ({:?})!", PrintState::STARTED, self.state)));
         }

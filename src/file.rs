@@ -230,7 +230,7 @@ impl GCodeFile {
     }
 
     pub fn name(&self) -> &str {
-        self.path.file_name().unwrap().to_str().unwrap()
+        self.path.file_name().unwrap_or_default().to_str().unwrap_or_default()
     }
 
     pub fn get_remaining_time(&self, cur_time_secs: Duration) -> Option<Duration> {

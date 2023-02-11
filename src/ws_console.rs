@@ -63,7 +63,10 @@ impl ws::Handler for ConsoleHandler {
 
     fn on_close(&mut self, code: ws::CloseCode, reason: &str) {
         info!("WebSocket closing for ({:?}) {}", code, reason);
-        self.out.shutdown().unwrap();
+        match self.out.shutdown() {
+            Err(e) => {error!("Failed to shutdown websocket: {}", e)}
+            Ok(_) => {}
+        }
     }
     fn on_timeout(&mut self, event: ws::util::Token) -> ws::Result<()> {
         match event {

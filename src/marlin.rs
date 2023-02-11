@@ -26,7 +26,7 @@ pub struct Marlin {
 impl Marlin {
     fn parse_temperature(in_str: &str) -> std::io::Result<Vec<Temperature>> {
         let mut results : Vec<Temperature> = TEMP_DEG_REGEX.captures_iter(in_str)
-        .filter(|cap| {cap.len() >= 2 && cap.get(0).is_some() && cap.get(0).unwrap().as_str().len() > 2})
+        .filter(|cap| {cap.len() >= 3 && cap.get(0).is_some() && cap.get(0).unwrap().as_str().len() > 2})
         .map(|cap| {
             let point = match cap.get(0).unwrap().as_str().chars().nth(0) {
                 Some('T') => {ProbePoint::HOTEND}
@@ -73,11 +73,11 @@ impl Marlin {
         let mut new_pos = Position{x:0.0, y: 0.0, z:0.0, e:0.0};
         
         for cap in POSITION_REGEX.captures_iter(in_str) {
-            if cap.len() < 2 {
+            if cap.len() < 3 {
                 error!("Cannot parse position: {:?}", cap);
                 continue;
             }
-
+            println!("{}", cap.len());
             let val = cap.get(2).unwrap().as_str().parse::<f64>();
 
             if let Err(e) = val {
