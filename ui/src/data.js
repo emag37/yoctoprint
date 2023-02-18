@@ -23,7 +23,7 @@ export function send_api_cmd(method, path, body = null) {
     .then(refreshStatus)
 }
 
-export const server_addr = /*window.location.hostname*/"192.168.4.168";
+export const server_addr = window.location.hostname;
 
 export function api_url() {
     return 'http://' + server_addr + ":5000/api/";
