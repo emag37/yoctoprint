@@ -45,7 +45,8 @@ pub trait SerialProtocol {
     fn parse_outgoing_cmd(&self, out_cmd: &str) -> Option<OutgoingCmd>;
     fn get_home_cmds(&self, axes : &EnumSet<internal_api::Axis>) -> Vec<String>;
     fn get_set_temperature_cmds(&self, new_t: &TemperatureTarget) -> Vec<String>;
-    fn get_move_cmds(&self, new_pos: &Position, cur_pos_mode_az_e: (PositionMode, PositionMode)) -> Vec<String>;
+    fn get_set_position_mode(&self, mode_xyz: &PositionMode, mode_extruder: &PositionMode) -> Vec<String>;
+    fn get_move_cmds(&self, new_pos: &Position, with_extruder: bool) -> Vec<String>;
     fn get_enable_temperature_updates_cmds(&self, interval: std::time::Duration) -> Vec<String>;
     // Adds metadata to a command, e.g: Line number and checksum for Marlin
     fn add_message_frame(&self, line_no: u32, cmd: &str) -> String;
@@ -54,6 +55,9 @@ pub trait SerialProtocol {
     fn get_fan_speed_cmd(&self, index:u32, speed: f64) -> String;
     fn get_save_position_cmd(&self) -> String;
     fn get_restore_position_cmd(&self) -> String;
+    fn get_report_position_cmd(&self) -> String;
+    fn get_retract_extruder_cmd(&self) -> String;
+    fn get_recover_extruder_cmd(&self) -> String;
 }
 
 pub struct PrinterComms {

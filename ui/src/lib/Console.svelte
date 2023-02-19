@@ -62,6 +62,7 @@
 
 <style>
     .console_container{
+        margin-top: 10px;
         max-width: 50%;
         display: grid;
         grid-template-columns: 10fr 1fr;

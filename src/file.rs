@@ -93,6 +93,7 @@ impl PrintDurationEstimator{
     }
 
     pub fn get_remaining_time(&self, cur_line_in_file: u32, cur_t: Duration) -> Duration {
+        let cur_t_f64 = cur_t.as_secs_f64();
         // Increment the index until the timepoint is after the current line
         while cur_line_in_file > self.line_no_elapsed[*self.this_line_no_elapsed_idx.borrow()].0 && *self.this_line_no_elapsed_idx.borrow() < self.line_no_elapsed.len() {
             *self.this_line_no_elapsed_idx.borrow_mut() += 1;
@@ -112,19 +113,19 @@ impl PrintDurationEstimator{
         let intercept = t2.as_secs_f64() - slope * (*l2 as f64);
 
         // Find the expected time point based on the interpolation
-        let expected_t = Duration::from_secs_f64((slope * (cur_line_in_file as f64) + intercept).max(0.));
+        let expected_t = (slope * (cur_line_in_file as f64) + intercept).max(0.);
 
-        let mut remaining_t = self.line_no_elapsed.last().unwrap().1 - expected_t;
+        let mut remaining_t = self.line_no_elapsed.last().unwrap().1.as_secs_f64() - expected_t;
 
-        if cur_t >= expected_t {
+        if cur_t_f64 >= expected_t {
             // We're late - add the lateness to the remaining time
-            remaining_t = remaining_t.add(cur_t.sub(expected_t));
+            remaining_t = remaining_t + (cur_t_f64 - expected_t);
         } else {
             // We're early! Subtract the earliness from the remaining time
-            remaining_t = remaining_t.saturating_sub(expected_t.sub(cur_t));
+            remaining_t = remaining_t - (expected_t - cur_t_f64);
         }
 
-        return remaining_t;
+        return Duration::from_secs_f64(remaining_t.max(0.));
     }
 
     pub fn get_last_time_point_duration(&self) -> (u32, Duration){

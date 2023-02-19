@@ -178,6 +178,9 @@ function setTemperature(id, index, new_temp) {
     border-radius: 10px;
     border-width: 1px;
     padding: 10px;
+    max-width: min-content;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .step_adjust {

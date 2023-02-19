@@ -120,7 +120,7 @@
     {#each files as file}
         <div class="fileobj">
             <div class="fileinfo">
-                <div class="filename">{file.name}</div>
+                <div class="filename" title={file.name}>{file.name}</div>
                 <div class="size">{file.size}</div>
             </div>
             
@@ -167,6 +167,7 @@
         text-align: start;
         overflow-x: hidden;
         font-weight: bold;
+        margin-right: 2%;
     }
     .size {
         text-align: end;

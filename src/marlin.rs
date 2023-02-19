@@ -262,14 +262,28 @@ impl SerialProtocol for Marlin {
         vec![format!("{} {} {}", code, index, target)]
     }
 
-    fn get_move_cmds(&self, new_pos: &Position, cur_pos_mode_az_e: (PositionMode, PositionMode)) -> Vec<String> {
-        let mut cmds = vec!["G91".to_owned(),format!("G1 E{:.5} X{:.5} Y{:.5} Z{:.5}", new_pos.e, new_pos.x, new_pos.y, new_pos.z)];
+    fn get_move_cmds(&self, new_pos: &Position, with_extruder: bool) -> Vec<String> {
+        let mut cmd = format!("G1 X{:.5} Y{:.5} Z{:.5}", new_pos.x, new_pos.y, new_pos.z);
 
-        if matches!(cur_pos_mode_az_e.0, PositionMode::ABSOLUTE) {
-            cmds.push("G90".to_owned());
-        } else if matches!(cur_pos_mode_az_e.1, PositionMode::ABSOLUTE) {
-            cmds.push("M82".to_owned());
+        if with_extruder {
+            cmd += format!(" E{:.5}", new_pos.e).as_str();
         }
+        return vec![cmd];
+    }
+
+    fn get_set_position_mode(&self, mode_xyz: &PositionMode, mode_extruder: &PositionMode) -> Vec<String> {
+        let mut cmds = Vec::<String>::new();
+        
+        cmds.push(match mode_xyz {
+            PositionMode::ABSOLUTE => "G90".into(),
+            PositionMode::RELATIVE => "G91".into()
+        });
+
+        cmds.push(match mode_extruder {
+            PositionMode::ABSOLUTE => "M82".into(),
+            PositionMode::RELATIVE => "M83".into()
+        });
+
         return cmds;
     }
 
@@ -300,6 +314,18 @@ impl SerialProtocol for Marlin {
 
     fn get_restore_position_cmd(&self) -> String {
         return "G61 X Y Z".to_string();
+    }
+
+    fn get_report_position_cmd(&self) -> String {
+        return "M114".to_string();
+    }
+
+    fn get_retract_extruder_cmd(&self) -> String {
+        return "G10".to_string();
+    }
+
+    fn get_recover_extruder_cmd(&self) -> String {
+        return "G11".to_string();
     }
 }
 
