@@ -67,6 +67,22 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
             internal_api::PrinterResponse::GenericResult(printer_ref.set_gcode_file(&file::get_abs_gcode_path(base_path, path)))
         },
         PrinterCommand::DeleteGcodeFile(path) => {
+            match printer_ref.get_status() {
+                Ok(status) => {
+                    match status.gcode_lines_done_total {
+                        Some(gcode) => {
+                            if gcode.0.ends_with(path.as_os_str().to_str().unwrap()) {
+                                if let Err(e) = printer_ref.clear_gcode_file() {
+                                    return internal_api::PrinterResponse::GenericResult(Err(e));
+                                }
+                            }
+                        },
+                        None => {}
+                    }
+                }
+                _ => {}
+            }
+
             internal_api::PrinterResponse::GenericResult(std::fs::remove_file(file::get_abs_gcode_path(base_path, path)))
         },
         PrinterCommand::StartPrint => {

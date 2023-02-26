@@ -36,8 +36,7 @@
                 }
                 textLines = textLines; // Svelte pls.
                 
-                const wasBottom = textArea.scrollHeight === textArea.clientHeight || textArea.scrollTop + textArea.clientHeight === textArea.scrollHeight;
-
+                const wasBottom = textArea.scrollHeight === textArea.clientHeight || textArea.scrollTop + textArea.clientHeight >= textArea.scrollHeight - 100;
                 if (wasBottom) {
                     tick().then(() => {
                         textArea.scrollTop = textArea.scrollHeight - textArea.clientHeight;

@@ -26,6 +26,7 @@ pub trait PrinterControl {
     fn get_status(&self) -> Result<internal_api::PrinterStatus>;
     fn get_state(&self) -> PrintState;
     fn set_gcode_file(&mut self, abs_path: &PathBuf) -> Result<()>;
+    fn clear_gcode_file(&mut self) -> Result<()>;
     fn start(&mut self) -> Result<()>;
     fn stop(&mut self) -> Result<()>;
     fn pause(&mut self) -> Result<()>;
@@ -169,6 +170,12 @@ macro_rules! send_series_of_cmds_read_until_response {
     };
 }
 
+#[derive(Default, Debug, Clone)]
+struct PositionData {
+    current: Position,
+    saved: Position, // For pause/resume
+    move_mode_xyz_e: (PositionMode, PositionMode),
+}
 
 pub struct Printer {
     pub comms: serial::PrinterComms,
@@ -176,8 +183,7 @@ pub struct Printer {
     to_print: Option<file::GCodeFile>,
     homed_axes: EnumSet<Axis>,
     temperatures: Vec<Temperature>,
-    position: Position,
-    move_mode_xyz_e: (PositionMode, PositionMode),
+    position: PositionData,
     state: PrintState,
     is_busy: bool,
     print_timer: PrintTimer,
@@ -227,7 +233,7 @@ impl PrinterControl for Printer {
             manual_control_enabled: self.can_move_manually(), 
             state: self.state, 
             temperatures: self.temperatures.clone(), 
-            position: self.position, 
+            position: self.position.current, 
             gcode_lines_done_total: match &self.to_print {
                 Some(p) => {Some((p.name().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
@@ -260,6 +266,15 @@ impl PrinterControl for Printer {
         }
     }
 
+    fn clear_gcode_file(&mut self) -> Result<()> {
+        if self.state != PrintState::CONNECTED && self.state != PrintState::DONE {
+            return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Cannot clear gcode file in this state ({:?})!", self.state)));
+        }
+
+        self.to_print = None;
+        Ok(())
+    }
+
     fn start(&mut self) -> Result<()> {
         if self.state != PrintState::CONNECTED && self.state != PrintState::PAUSED && self.state != PrintState::DONE {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be started from this state ({:?})!", self.state)));
@@ -280,9 +295,9 @@ impl PrinterControl for Printer {
         if self.state == PrintState::PAUSED {
             send_series_of_cmds_read_until_response!(self,
                 self.protocol.get_set_position_mode(&PositionMode::ABSOLUTE, &PositionMode::ABSOLUTE), 
-                self.protocol.get_move_cmds(&self.position, false),
+                self.protocol.get_move_cmds(&self.position.saved, false),
                 self.protocol.get_recover_extruder_cmd(),
-                self.protocol.get_set_position_mode(&self.move_mode_xyz_e.0, &self.move_mode_xyz_e.1));
+                self.protocol.get_set_position_mode(&self.position.move_mode_xyz_e.0, &self.position.move_mode_xyz_e.1));
         }
         
         self.transition_state(PrintState::STARTED);
@@ -365,7 +380,7 @@ impl PrinterControl for Printer {
         send_series_of_cmds_read_until_response!(self,
             self.protocol.get_set_position_mode(&PositionMode::RELATIVE, &PositionMode::RELATIVE),
             self.protocol.get_move_cmds(new_pos, true),
-            self.protocol.get_set_position_mode(&self.move_mode_xyz_e.0, &self.move_mode_xyz_e.1)
+            self.protocol.get_set_position_mode(&self.position.move_mode_xyz_e.0, &self.position.move_mode_xyz_e.1)
         );
 
         Ok(())
@@ -430,6 +445,8 @@ impl PrinterControl for Printer {
     fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>) {
         self.external_console.get_ext_channels()
     }
+
+
 }
 
 impl Printer {
@@ -437,8 +454,8 @@ impl Printer {
         if let Some(fw) = comms.fw_info.get("FIRMWARE_NAME") {
             if fw.to_lowercase().contains("marlin") {
                 let mut ret_printer = Printer{comms, protocol:Box::new(marlin::Marlin{}), to_print: None, state: PrintState::CONNECTED,
-                homed_axes:EnumSet::new(), temperatures: Vec::new(), position: Position::default(),
-                move_mode_xyz_e: (PositionMode::ABSOLUTE, PositionMode::ABSOLUTE), is_busy: false,
+                homed_axes:EnumSet::new(), temperatures: Vec::new(), position: PositionData::default(),
+                is_busy: false,
                 print_timer: PrintTimer::new(),
                 fan_speeds: vec![0.], external_console: ExternalConsole::new()};
 
@@ -527,7 +544,7 @@ impl Printer {
                 self.temperatures = temp.clone();
             }
             serial::Response::POSITION(pos) => {
-                self.position = pos.clone();
+                self.position.current = pos.clone();
             } 
             _ => {}
         }
@@ -542,11 +559,11 @@ impl Printer {
                     match mode_change {
                         PositionModeCmd::All(m) => {
                             info!("Position mode for all axes changed to {:?}", m);
-                            self.move_mode_xyz_e = (m,m);
+                            self.position.move_mode_xyz_e = (m,m);
                         },
                         PositionModeCmd::ExtruderOnly(m) => {
                             info!("Position mode for extruder changed to {:?}", m);
-                            self.move_mode_xyz_e.1 = m;
+                            self.position.move_mode_xyz_e.1 = m;
                         },
                     }
                 },
@@ -558,6 +575,9 @@ impl Printer {
                 },
                 OutgoingCmd::HomeAxes(axes) => {
                     self.homed_axes |= axes;
+                },
+                OutgoingCmd::PositionChange(new_pos) => {
+
                 }
             }
         }
@@ -645,7 +665,7 @@ pub struct SimulatedPrinter {
     to_print: Option<file::GCodeFile>,
     homed_axes: EnumSet<Axis>,
     temperatures: Vec<Temperature>,
-    position: Position,
+    position: PositionData,
     state: PrintState,
     last_line_at : std::time::Instant,
     last_temp_update: std::time::Instant,
@@ -661,7 +681,7 @@ impl SimulatedPrinter {
         let init_temps = vec![Temperature{ measured_from: internal_api::ProbePoint::HOTEND, index: 0, power: 0., current: 25.0, target: 25.0 },
                                                 Temperature{ measured_from: internal_api::ProbePoint::BED, index: 0, power: 0., current: 21.0, target: 21.0 }];
         SimulatedPrinter { to_print: None, state: PrintState::CONNECTED,
-            homed_axes:EnumSet::new(), temperatures: init_temps, position: Position::default(), 
+            homed_axes:EnumSet::new(), temperatures: init_temps, position: PositionData::default(), 
             last_line_at: std::time::Instant::now(),
             last_temp_update: std::time::Instant::now(),
             print_timer: PrintTimer::new(),
@@ -733,7 +753,7 @@ impl PrinterControl for SimulatedPrinter {
             manual_control_enabled: self.homed_axes.is_superset(enum_set!(Axis::X | Axis::Y | Axis::Z)), 
             state: self.state, 
             temperatures: self.temperatures.clone(), 
-            position: self.position, 
+            position: self.position.current, 
             gcode_lines_done_total: match &self.to_print {
                 Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
@@ -764,6 +784,15 @@ impl PrinterControl for SimulatedPrinter {
                 Err(e)
             }
         }
+    }
+
+    fn clear_gcode_file(&mut self) -> Result<()> {
+        if self.state != PrintState::CONNECTED && self.state != PrintState::DONE {
+            return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Cannot clear gcode file in this state ({:?})!", self.state)));
+        }
+
+        self.to_print = None;
+        Ok(())
     }
 
     fn start(&mut self) -> Result<()> {

@@ -113,7 +113,7 @@ impl PrintDurationEstimator{
         let intercept = t2.as_secs_f64() - slope * (*l2 as f64);
 
         // Find the expected time point based on the interpolation
-        let expected_t = (slope * (cur_line_in_file as f64) + intercept).max(0.);
+        let expected_t = slope * (cur_line_in_file as f64) + intercept;
 
         let mut remaining_t = self.line_no_elapsed.last().unwrap().1.as_secs_f64() - expected_t;
 

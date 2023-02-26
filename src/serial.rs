@@ -18,26 +18,28 @@ pub enum Response {
     NACK(u32)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq)]
 #[derive(Copy, Clone)]
 pub enum PositionMode {
+    #[default]
     ABSOLUTE,
     RELATIVE
 }
 
 #[derive(Debug)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum PositionModeCmd {
     All(PositionMode),
     ExtruderOnly(PositionMode)
 }
 
 #[derive(Debug)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum OutgoingCmd {
     PositionModeChange(PositionModeCmd),
     FanSpeedChange((u32, f64)),
-    HomeAxes(EnumSet<Axis>)
+    HomeAxes(EnumSet<Axis>),
+    PositionChange(Position)
 }
 
 pub trait SerialProtocol {

@@ -14,7 +14,8 @@ lazy_static! {
     // Matches @:0
     static ref HEATER_POWER_REGEX: Regex = Regex::new(r"([BC]?@[0-9]?):([0-9]+)").unwrap();
     static ref RESIDENCY_REGEX: Regex = Regex::new(r"W:([\?0-9][0-9]*)").unwrap();
-    static ref POSITION_REGEX: Regex = Regex::new(r"([XYZE]):(-?[0-9]+\.[0-9]+)").unwrap();
+    static ref RX_POSITION_REGEX: Regex = Regex::new(r"([XYZE]):(-?[0-9]+\.?[0-9]*)").unwrap();
+    static ref TX_POSITION_REGEX: Regex = Regex::new(r"([XYZE])(-?[0-9]+\.?[0-9]*)").unwrap();
     static ref LAST_LINE_REGEX: Regex = Regex::new(r"Last Line: ?([0-9]+)").unwrap();
 }
 
@@ -69,15 +70,22 @@ impl Marlin {
         Ok(results)
     }
 
-    fn parse_position(in_str: &str) -> Result<Position>{
+    fn parse_position(in_str: &str, is_tx: bool) -> Result<Position>{
+        let mut parsed: EnumSet<Axis> = EnumSet::new();
         let mut new_pos = Position{x:0.0, y: 0.0, z:0.0, e:0.0};
         
-        for cap in POSITION_REGEX.captures_iter(in_str) {
+        let regex: &Regex = if is_tx {&TX_POSITION_REGEX} else {&RX_POSITION_REGEX};
+
+        for cap in regex.captures_iter(in_str) {
+            if parsed == enum_set!(Axis::X | Axis::Y | Axis::Z | Axis::E) {
+                break;
+            }
+            
             if cap.len() < 3 {
                 error!("Cannot parse position: {:?}", cap);
                 continue;
             }
-            println!("{}", cap.len());
+            
             let val = cap.get(2).unwrap().as_str().parse::<f64>();
 
             if let Err(e) = val {
@@ -86,10 +94,10 @@ impl Marlin {
             }
 
             match cap.get(1).unwrap().as_str().chars().nth(0) {
-                Some('X') => {new_pos.x = val.unwrap();},
-                Some('Y') => {new_pos.y = val.unwrap();},
-                Some('Z') => {new_pos.z = val.unwrap();},
-                Some('E') => {new_pos.e = val.unwrap();},
+                Some('X') => {new_pos.x = val.unwrap(); parsed.insert(Axis::X);},
+                Some('Y') => {new_pos.y = val.unwrap(); parsed.insert(Axis::Y);},
+                Some('Z') => {new_pos.z = val.unwrap(); parsed.insert(Axis::Z);},
+                Some('E') => {new_pos.e = val.unwrap(); parsed.insert(Axis::E);},
                 _ => {error!("Cannot parse position type {:?}", cap.get(1))}
             };
         }
@@ -183,7 +191,7 @@ impl SerialProtocol for Marlin {
             }
             
         } else if trimmed_line.starts_with("X:") {
-            return match Self::parse_position(line) {
+            return match Self::parse_position(line, false) {
                 Ok(res) => {
                     Ok(Response::POSITION(res))
                 }
@@ -214,6 +222,14 @@ impl SerialProtocol for Marlin {
             Some(OutgoingCmd::FanSpeedChange(self.parse_fan_speed(out_cmd)))
         } else if out_cmd.starts_with("G28") {
             Some(OutgoingCmd::HomeAxes(self.parse_home_cmd(out_cmd)))
+        } else if   out_cmd.starts_with("G0") || 
+                    out_cmd.starts_with("G1") ||
+                    out_cmd.starts_with("G2") ||
+                    out_cmd.starts_with("G3") {
+            match Marlin::parse_position(out_cmd, true) {
+                Ok(pos) => Some(OutgoingCmd::PositionChange(pos)),
+                Err(_) => None
+            }
         } else {
             None
         }
@@ -424,6 +440,19 @@ mod tests {
         assert_eq!(Marlin{}.get_home_cmds(&(Axis::X | Axis::Y | Axis::Z))[1], "G28 X Y Z");
         assert_eq!(Marlin{}.get_home_cmds(&(Axis::Y | Axis::Z))[1], "G28 Y Z");
         assert_eq!(Marlin{}.get_home_cmds(&(Axis::Y | Axis::Z | Axis::E))[1], "G28 Y Z");
+    }
+
+    #[test]
+    fn parse_outgoing_position() {
+        assert_eq!(Marlin{}.parse_outgoing_cmd("G0 F7200 X128.675 Y77.399").unwrap(), 
+        OutgoingCmd::PositionChange(Position{x: 128.675, y: 77.399, z:0., e:0.}));
+
+        assert_eq!(Marlin{}.parse_outgoing_cmd("G2 F1200 X3.232 Y43 Z10.2").unwrap(), 
+        OutgoingCmd::PositionChange(Position{x: 3.232, y: 43., z:10.2, e:0.}));
+
+        assert_eq!(Marlin{}.parse_outgoing_cmd("G2 F1200 E10494").unwrap(), 
+        OutgoingCmd::PositionChange(Position{x: 0., y: 0., z:0., e:10494.}));
+
     }
 
 }
