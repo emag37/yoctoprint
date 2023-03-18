@@ -52,17 +52,19 @@
     
 </script>
 
-<div class="console_container">
-    <textarea cols=50 rows=10 readonly="true" overflow="auto" class="output" bind:this={textArea}>{textLines.join("")}</textarea>
+<div class="window">
+    <span>Console</span>
+    <button>Activate</button>
+    <div class="console_container">
+        <textarea cols=50 rows=10 readonly="true" overflow="auto" class="output" bind:this={textArea}>{textLines.join("")}</textarea>
 
-    <input class="input" type="text" bind:value="{inputText}"/>
-    <button class="send" disabled={$status.state == "STARTED" || socket == null || socket.readyState != 1 || inputText.length === 0} on:click={sendInput}>Send</button>
+        <input class="input" type="text" bind:value="{inputText}"/>
+        <button class="send" disabled={$status.state == "STARTED" || socket == null || socket.readyState != 1 || inputText.length === 0} on:click={sendInput}>Send</button>
+    </div>
 </div>
-
 <style>
     .console_container{
         margin-top: 10px;
-        max-width: 50%;
         display: grid;
         grid-template-columns: 10fr 1fr;
     }
@@ -84,5 +86,14 @@
         grid-row: 2;
         grid-column: 2;
         max-width: min-content;
+    }
+    .window {
+        text-align: left;
+        border-width: 1px;
+        border-style: solid;
+        border-color: gray;
+        padding:5px;
+        border-radius: 5px;
+        max-width: 50%;
     }
 </style>
