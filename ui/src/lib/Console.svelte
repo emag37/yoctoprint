@@ -1,18 +1,25 @@
 <script>
     import { api_url, server_addr, status } from '../data';
-    import { onMount } from 'svelte';
     import { tick } from 'svelte';
-
+    import connectIcon from '../assets/connect.png';
+    
     const bufferDepth = 500;
 
+    const connectedColour = "#2ebc33"
+    const disconnectedColour = "darkgrey"
     let socket = null;
     let inputText = "";
     let textLines = [];
     let textArea = null;
+    let isConnected = false;
 
-    onMount(()=>{
-        openConsole();
-    });
+    function toggleConsole() {
+        if (isConnected === true) {
+            socket.close();
+        } else {
+            openConsole();
+        }
+    }
 
     function sendInput() {
         socket.send(inputText);
@@ -24,7 +31,11 @@
         .then(resp => {
             return resp.text()
         }).then(port_str => {
+            isConnected = true;
             socket = new WebSocket(`ws://${server_addr}:${port_str}`); 
+            socket.onclose = (_ev) => {
+                isConnected = false;
+            }
             socket.onmessage = (msg_json) => {
                 let msg = JSON.parse(msg_json.data);
                 if (msg.is_echo) {
@@ -46,6 +57,7 @@
             }
         })
         .catch(err => {
+            isConnected = false;
             console.log(err);
         });
     }
@@ -53,14 +65,20 @@
 </script>
 
 <div class="window">
-    <span>Console</span>
-    <button>Activate</button>
+    <div class="header">
+        <div style="grid-row:1; grid-column:1; font-size: large ">G-Code Console</div>
+        <button style="grid-row:1; grid-column:2; background-color: {isConnected === true ? connectedColour : disconnectedColour}" title="Connect / Disconnect Console" on:click={toggleConsole}>
+        <img width="25" height="25" alt="connect console" src={connectIcon}/>
+    </button>
+    </div>
+    {#if isConnected === true}
     <div class="console_container">
         <textarea cols=50 rows=10 readonly="true" overflow="auto" class="output" bind:this={textArea}>{textLines.join("")}</textarea>
 
         <input class="input" type="text" bind:value="{inputText}"/>
         <button class="send" disabled={$status.state == "STARTED" || socket == null || socket.readyState != 1 || inputText.length === 0} on:click={sendInput}>Send</button>
     </div>
+    {/if}
 </div>
 <style>
     .console_container{
@@ -72,7 +90,11 @@
     .console_container > textarea {
         background-color: lightgray;
     }
-
+    .header {
+        display:grid;
+        justify-content: space-between;
+        align-items: center;
+    }
     .output {
         grid-column: 1 / span 2;
         grid-row: 1;

@@ -114,11 +114,11 @@ impl Marlin {
         let mut ret_set = EnumSet::<Axis>::empty();
 
         for segment in in_str.split(' ') {
-            match segment.to_uppercase().as_str() {
-                "X" => ret_set |= Axis::X,
-                "Y" => ret_set |= Axis::Y,
-                "Z" => ret_set |= Axis::Z,
-                "0" => ret_set |= ALL_VALID,
+            match segment.chars().nth(0).unwrap_or('-') {
+                'X' | 'x' => ret_set |= Axis::X,
+                'Y' | 'y' => ret_set |= Axis::Y,
+                'Z' | 'z' => ret_set |= Axis::Z,
+                '0' => ret_set |= ALL_VALID,
                 _ => {}
             }
         }
@@ -433,6 +433,9 @@ mod tests {
 
         test_line = "G28 Y";
         assert_eq!(Marlin{}.parse_home_cmd(test_line), enum_set!(Axis::Y));
+
+        test_line = "G28 X0 y0";
+        assert_eq!(Marlin{}.parse_home_cmd(test_line), enum_set!(Axis::X | Axis::Y));
     }
 
     #[test]
