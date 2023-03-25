@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="103.63mm" height="109.62mm" version="1.1" viewBox="0 0 103.63 109.62" xmlns="http://www.w3.org/2000/svg">
+ <g transform="translate(-53.141 -72.876)">
+  <g fill="#f2f2f2" stroke="#000" stroke-width="1.165">
+   <rect x="53.723" y="73.459" width="102.47" height="107.56"/>
+   <path class="UnoptimicedTransforms" d="m54.335 94.814h102.09m-102.09 21.431h102.09m-102.09 21.431h102.09m-102.09 21.431h102.09m-102.09 21.431h102.09"/>
+   <path d="m103.71 73.367v107.11l0.72433-1.1466"/>
+  </g>
+  <circle cx="103.45" cy="127.45" r="27.556" fill="#0bb7f0" stroke="#000" stroke-width="1.165"/>
+  <text transform="scale(1.05 .95234)" x="89.315048" y="152.26274" fill="#000000" font-family="Rasa" font-size="67.414px" stroke="#000000" stroke-width="1.546" xml:space="preserve"><tspan x="89.315048" y="152.26274" fill="#000000" font-family="Rasa" font-size="67.414px" stroke-width="1.546">i</tspan></text>
+ </g>
+</svg>

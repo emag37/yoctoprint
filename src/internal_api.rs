@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::PathBuf;
 use rocket::serde::{Serialize};
 use serde::Deserialize;
@@ -92,6 +94,11 @@ pub struct PrinterStatus {
     pub fan_speed: Vec<f64>
 }
 
+#[derive(Serialize, Clone)]
+pub struct PrinterInfo {
+    pub values: HashMap<String, String>,
+}
+
 impl Default for PrinterStatus {
     fn default() -> PrinterStatus {
         PrinterStatus { printer_connected: false, manual_control_enabled: false,state: PrintState::DEAD, temperatures: Vec::new(), gcode_lines_done_total: None, position: Position::default(), print_time_remaining: None,
@@ -113,7 +120,8 @@ pub enum PrinterCommand {
     Home(EnumSet<Axis>),
     SetTemperature(TemperatureTarget),
     SetFanSpeed((u32, f64)),
-    OpenConsole
+    OpenConsole,
+    GetPrinterInfo
 }
 
 #[derive(Clone, Debug)]
@@ -127,5 +135,6 @@ pub struct ConsoleMessage {
 pub enum PrinterResponse {
     GenericResult(std::io::Result<()>),
     Status(std::io::Result<PrinterStatus>),
-    ConsoleChannel((Sender<ConsoleMessage>, Receiver<ConsoleMessage>))
+    ConsoleChannel((Sender<ConsoleMessage>, Receiver<ConsoleMessage>)),
+    Info(std::io::Result<PrinterInfo>)
 }

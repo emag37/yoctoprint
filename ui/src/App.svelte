@@ -6,6 +6,7 @@
   import Temperature from './lib/Temperature.svelte';
   import Files from './lib/Files.svelte';
   import PrintJob from './lib/PrintJob.svelte';
+  import Nav from './lib/Nav.svelte';
   import Modal from 'svelte-simple-modal';
   import YoctoprintConnectionModal from './lib/YoctoprintConnectionModal.svelte';
   import PrinterConnectionModal from './lib/PrinterConnectionModal.svelte';
@@ -29,6 +30,7 @@
 <main>
   <Modal show={$modal} closeOnOuterClick={false} closeButton={false} closeOnEsc={false} >
     <div>
+      <Nav/>
       <div class="card">
         <PrintJob />
       </div>

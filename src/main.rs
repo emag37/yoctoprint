@@ -115,6 +115,9 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
         PrinterCommand::OpenConsole => {
             return PrinterResponse::ConsoleChannel(printer_ref.create_external_console());
         },
+        PrinterCommand::GetPrinterInfo => {
+            return PrinterResponse::Info(printer_ref.get_info());
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::internal_api::Axis;
 use crate::internal_api::ConsoleMessage;
 use crate::internal_api::Position;
+use crate::internal_api::PrinterInfo;
 use crate::internal_api::Temperature;
 use crate::internal_api::TemperatureTarget;
 use crate::serial;
@@ -8,6 +9,8 @@ use crate::internal_api;
 use crate::file;
 use crate::marlin;
 
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::ops::Div;
 use std::time::Duration;
 use std::vec;
@@ -35,6 +38,7 @@ pub trait PrinterControl {
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()>;
     fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()>;
     fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>);
+    fn get_info(&self) -> Result<PrinterInfo>;
 }
 
 struct PrintTimer {
@@ -446,6 +450,10 @@ impl PrinterControl for Printer {
         self.external_console.get_ext_channels()
     }
 
+    fn get_info(&self) -> Result<PrinterInfo> {
+        Ok(PrinterInfo{values:self.comms.fw_info.clone()})
+    }
+
 
 }
 
@@ -851,5 +859,42 @@ impl PrinterControl for SimulatedPrinter {
 
     fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>) {
         self.external_console.get_ext_channels()
+    }
+
+    fn get_info(&self) -> Result<PrinterInfo> {
+
+        Ok(PrinterInfo {values: HashMap::from(
+            [("AUTOLEVEL".to_owned(),"1".to_owned()),
+            ("SOURCE_CODE_URL".to_owned(),"https://github.com/MarlinFirmware/Marlin".to_owned()),
+            ("AUTOREPORT_SD_STATUS".to_owned(),"0".to_owned()),
+            ("CASE_LIGHT_BRIGHTNESS".to_owned(),"0".to_owned()),
+            ("EEPROM".to_owned(),"1".to_owned()),
+            ("PRINT_JOB".to_owned(),"1".to_owned()),
+            ("VOLUMETRIC".to_owned(),"1".to_owned()),
+            ("PROTOCOL_VERSION".to_owned(),"1.0".to_owned()),
+            ("AUTOREPORT_TEMP".to_owned(),"1".to_owned()),
+            ("THERMAL_PROTECTION".to_owned(),"1".to_owned()),
+            ("FIRMWARE_NAME".to_owned(),"Marlin 2.0.7.2 (Mar 20 2021 11:27:39)".to_owned()),
+            ("BUILD_PERCENT".to_owned(),"0".to_owned()),
+            ("PROMPT_SUPPORT".to_owned(),"0".to_owned()),
+            ("MOTION_MODES".to_owned(),"0".to_owned()),
+            ("TOGGLE_LIGHTS".to_owned(),"0".to_owned()),
+            ("SERIAL_XON_XOFF".to_owned(),"0".to_owned()),
+            ("UUID:".to_owned(),"ede2a2f-41a2-4748-9b12-c55c62f367ff".to_owned()),
+            ("EXTRUDER_COUNT".to_owned(),"1".to_owned()),
+            ("SDCARD".to_owned(),"1".to_owned()),
+            ("ARCS".to_owned(),"1".to_owned()),
+            ("LEVELING_DATA".to_owned(),"1".to_owned()),
+            ("PROGRESS".to_owned(),"0".to_owned()),
+            ("RUNOUT".to_owned(),"0".to_owned()),
+            ("Z_PROBE".to_owned(),"1".to_owned()),
+            ("LONG_FILENAME".to_owned(),"0".to_owned()),
+            ("EMERGENCY_PARSER".to_owned(),"0".to_owned()),
+            ("CHAMBER_TEMPERATURE".to_owned(),"0".to_owned()),
+            ("SOFTWARE_POWER".to_owned(),"0".to_owned()),
+            ("BABYSTEPPING".to_owned(),"0".to_owned()),
+            ("MACHINE_TYPE".to_owned(),"3D Printer".to_owned()),
+            ("BINARY_FILE_TRANSFER".to_owned(),"0".to_owned()),]
+        )})
     }
 }

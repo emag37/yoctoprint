@@ -8,7 +8,6 @@ import extrudeIcon from '../assets/extrude.svg';
 import retractIcon from '../assets/retract.svg';
 import NumberControl from './NumberControl.svelte';
 import { send_api_cmd, status } from '../data';
-import { onMount } from 'svelte';
 
 const step_map = [0.1, 1, 2, 3, 4, 5, 10, 20];
 

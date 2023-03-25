@@ -69,6 +69,26 @@ fn connect(comms: &State<InternalComms>, params: Json<ConnectParams>) -> Result<
     resp_generic_result_or_err(comms.from_internal.recv())
 }
 
+#[get("/printer_info")]
+fn printer_info(comms: &State<InternalComms>) -> Result<Json<PrinterInfo>, ApiError> {
+    if let Err(e) = comms.to_internal.send(PrinterCommand::GetPrinterInfo) {
+        return Err(crossbeam_err_to_io_err(e));
+    }
+    
+    match comms.from_internal.recv() {
+        Ok(resp) => {
+            match resp {
+                PrinterResponse::Info(Ok(info)) => { Ok(Json(info)) }
+                PrinterResponse::GenericResult(Err(e)) | PrinterResponse::Status(Err(e)) => {Err(ApiError(e))}
+                _ => {Err(ApiError(Error::new(ErrorKind::Unsupported, format!("Unexpected response"))))}
+            }
+        }
+        Err(e) => {
+            Err(crossbeam_err_to_io_err(e))
+        }
+    }
+}
+
 #[get("/status")]
 fn status(comms: &State<InternalComms>) -> Result<Json<PrinterStatus>, ApiError> {
     if let Err(e) = comms.to_internal.send(PrinterCommand::GetStatus) {
@@ -296,7 +316,10 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
     let cors = CorsOptions::default().to_cors().unwrap();
 
     let api_rocket = rocket::build()
-    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, list_gcode, set_gcode, delete_gcode, start_print, stop_print, pause_print, set_temperature, set_fan_speed, open_console])
+    .mount("/api", routes![connect, status, home, move_rel, upload_gcode, 
+                                list_gcode, set_gcode, delete_gcode, start_print, stop_print, 
+                                pause_print, set_temperature, set_fan_speed, 
+                                open_console, printer_info])
     .mount("/", routes![index, serve_file])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
     .manage(WSConsoleState{console: Mutex::new(None)})
