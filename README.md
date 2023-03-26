@@ -6,6 +6,10 @@ I've been using [Octoprint](https://octoprint.org/) with my Printrbot Simple Met
 
 Yoctoprint is my own minimalist version written in Rust to get that sweet native performance.
 
+It has basic features like manual control, pause/resume, G-Code console, and more!
+
+![In Action](screencap.png)
+
 ## Requirements
 - Rust
 - NodeJS
@@ -14,4 +18,4 @@ Yoctoprint is my own minimalist version written in Rust to get that sweet native
 Run the `./build.sh` script. I have it set up for a cross-build with a Yocto SDK with `./build.sh arm` or an x86 build with `./build.sh`.
 
 ## Can I Use This?
-YJust because you can doesn't mean you should. I have only tested it with my Printrbot Simple Metal running Marlin 2, and it lacks most of the safety/security features that Octoprint has. That being said, feel free to give it a whack, but please don't stray too far from your printer.
+Just because you can doesn't mean you should. I have only tested it with my Printrbot Simple Metal running Marlin 2, and it lacks most of the safety/security features that Octoprint has. That being said, feel free to give it a whack, but please don't stray too far from your printer.
