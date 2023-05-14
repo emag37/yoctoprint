@@ -22,6 +22,8 @@ let can_control;
 $: can_home = $status.state !== "STARTED" && !request_active;
 $: can_control = $status.manual_control_enabled === true && can_home;
 
+let position = $status.host_connected ? $status.position : {x:0., y:0., z:0., e:0.};
+
 function validateFeed() {
     if (current_feed < 0.1) {
         current_feed = 0.1;
@@ -109,7 +111,18 @@ function setTemperature(id, index, new_temp) {
         <button disabled={!can_control} class="control_button" style="grid-column: 2; grid-row: 4" on:click={() => move("Y", "-")}> 
             <img class="control_button_img" src={arrowDown}  alt="Y-"/>
         </button>
+        <div class="position_holder" style="grid-row:6; grid-column:1/span 4">
+            <div class="position">{position.x.toFixed(3)}</div>
+            <div class="position">/</div>
+            <div class="position">{position.y.toFixed(3)}</div>
+        </div>
+        <div class="position_holder" style="grid-row:6; grid-column:5">
+            <div class="position">{position.x.toFixed(3)}</div>
+        </div>
 
+        <div class="position_holder" style="grid-row:6; grid-column:7">
+            <div class="position">{position.x.toFixed(3)}</div>
+        </div>
         <div class="spacer" style="grid-column: 4"></div>
 
         <div class="title" style="grid-row: 1; grid-column: 5">Z</div>
@@ -250,6 +263,17 @@ function setTemperature(id, index, new_temp) {
     grid-row: 4/span 2;
     grid-column: 9;
     overflow-y: auto;
+}
+
+.position_holder {
+    border: 1px;
+    border-style: solid;
+    display: flex;
+    justify-content: space-around;
+    border-radius: 5px;
+}
+.position {
+    font-size: x-large;
 }
 
 </style>

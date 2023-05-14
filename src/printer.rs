@@ -192,7 +192,7 @@ pub struct Printer {
     is_busy: bool,
     print_timer: PrintTimer,
     fan_speeds: Vec<f64>,
-    external_console: ExternalConsole
+    external_console: ExternalConsole,
 }
 
 impl PrinterControl for Printer {
@@ -585,6 +585,20 @@ impl Printer {
                     self.homed_axes |= axes;
                 },
                 OutgoingCmd::PositionChange(new_pos) => {
+                    if self.position.move_mode_xyz_e.0 == PositionMode::RELATIVE {
+                        self.position.current.x += new_pos.x;
+                        self.position.current.y += new_pos.y;
+                        self.position.current.z += new_pos.z;
+                    } else {
+                        self.position.current.x = new_pos.x;
+                        self.position.current.y = new_pos.y;
+                        self.position.current.z = new_pos.z;
+                    }
+                    if self.position.move_mode_xyz_e.1 == PositionMode::RELATIVE {
+                        self.position.current.e += new_pos.e;
+                    } else {
+                        self.position.current.e = new_pos.e;
+                    }
 
                 }
             }

@@ -213,7 +213,17 @@ fn main() {
         rest_api::run_api(they_send, they_recv, base_dir_api, args.web_ui.into());
     });
 
-    loop {
+    let ctrl_c_pressed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ctrl_c_pressed_clone  = ctrl_c_pressed.clone();
+
+    if let Err(e) = ctrlc::set_handler(move || {
+        warn!("Shutting down due to Ctrl+C pressed.");
+        ctrl_c_pressed_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+    }) {
+        error!("Failed to set Ctrl+C handler: {:?}", e);
+    }
+
+    while !ctrl_c_pressed.load(std::sync::atomic::Ordering::Relaxed) {
         if let Ok(new_msg) =  we_recv.try_recv() {
             let resp = handle_incoming_cmd(&mut printer, &new_msg, &base_dir);
 
