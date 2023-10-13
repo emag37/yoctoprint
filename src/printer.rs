@@ -366,6 +366,8 @@ impl PrinterControl for Printer {
     }
 
     fn move_relative(&mut self, new_pos: &Position) -> Result<()> {
+        const MAX_REL_MOVE: f64 = 20.;
+
         if !matches!(self.state, PrintState::CONNECTED |  PrintState::DONE | PrintState::PAUSED) {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Printer cannot be moved from this state ({:?})!", self.state)));
         }
@@ -374,7 +376,7 @@ impl PrinterControl for Printer {
         }
 
         if [new_pos.x, new_pos.y, new_pos.z].iter()
-        .any(|coord| *coord > 20. || *coord < 0.) ||
+        .any(|coord| *coord > MAX_REL_MOVE || *coord < -MAX_REL_MOVE) ||
         (new_pos.e > 100. || new_pos.e < 0.){
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Relative move beyond acceptable range!"));
         }
