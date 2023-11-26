@@ -1,27 +1,24 @@
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use crossbeam::channel::{Sender, Receiver, RecvError};
 use rocket::data::ByteUnit;
+use rocket::futures::pin_mut;
+use rocket::serde::{json::Json, Serialize, Deserialize};
 use rocket::{State,Data, Request};
+use rocket::futures::future::Either;
+use rocket::fs::NamedFile;
+use rocket_cors::CorsOptions;
+use rocket_ws::Message;
 use crate::internal_api;
 use crate::file;
-use crate::ws_console::WSConsole;
+use crate::recv_channel_async_wrapper::RecvChannelAsyncWrapper;
 use internal_api::*;
-use rocket::serde::json::{Json};
-use rocket::serde::{Serialize,Deserialize};
-use rocket_cors::CorsOptions;
 use enumset::EnumSet;
-use rocket::fs::{NamedFile};
 
 struct InternalComms {
     to_internal: Sender<PrinterCommand>,
     from_internal: Receiver<PrinterResponse>
-}
-
-struct WSConsoleState {
-    console: Mutex<Option<WSConsole>>
 }
 
 struct WebUiDir(PathBuf);
@@ -177,7 +174,7 @@ fn set_fan_speed(comms: &State<InternalComms>, fan_speed : Json<FanSpeed>) -> Re
 async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir>) -> Result<(), ApiError> {
     let size_limit: ByteUnit = "50 MB".parse().unwrap();
 
-    let mut full_path : PathBuf = data_dir.clone().to_path_buf();
+    let mut full_path : PathBuf = data_dir.to_path_buf();
     full_path.push(file::GCODE_DIR);
     full_path.push(filename);
     
@@ -271,22 +268,87 @@ fn set_temperature(comms: &State<InternalComms>, temperature : Json<TemperatureT
     resp_generic_result_or_err(comms.from_internal.recv())
 }
 
-#[post("/open_console")]
-fn open_console(comms: &State<InternalComms>, console_state: &State<WSConsoleState>) -> Result<String, ApiError> {
-    if let Err(e) = comms.to_internal.send(PrinterCommand::OpenConsole) {
-        return Err(crossbeam_err_to_io_err(e));
-    }
+#[get("/console")]
+fn console(ws: rocket_ws::WebSocket, comms: &State<InternalComms>) -> rocket_ws::Channel<'_> {
 
-    match comms.from_internal.recv() {
-        Ok(PrinterResponse::ConsoleChannel(channels)) => {  
-            let new_console = WSConsole::new(channels);
-            let port = new_console.port();
-            *console_state.console.lock().unwrap() = Some(new_console);
-            Ok(port.to_string())
+    ws.channel(move |mut ws_stream| Box::pin(async move {
+        use rocket::futures::{StreamExt, SinkExt};
+
+        if let Err(e) = comms.to_internal.send(PrinterCommand::OpenConsole) {
+            error!("Could not send open console message: {:?}", e);
+            return Err(rocket_ws::result::Error::ConnectionClosed);
         }
-        Ok(_) => Err(ApiError(Error::new(ErrorKind::InvalidInput, "Got wrong response type for open console!"))),
-        Err(e) => Err(crossbeam_err_to_io_err(e))
-    }
+
+        match comms.from_internal.recv() {
+            Ok(PrinterResponse::ConsoleChannel(channels)) => {
+                let mut async_recv_console = RecvChannelAsyncWrapper::new(channels.1);
+                
+                loop {
+                    let ws_stream_future = async {
+                        ws_stream.next().await
+                    };
+                    let async_recv_console_future = async {
+                        async_recv_console.next().await
+                    };
+
+                    pin_mut!(ws_stream_future); // Wait for either a message from the websocket or the printer to arrive
+                    pin_mut!(async_recv_console_future);
+                    match rocket::futures::future::select(ws_stream_future, async_recv_console_future).await {
+                        Either::Left((ws_msg, _)) => {
+                            match ws_msg {
+                                Some(msg_or_err) => {
+                                    match msg_or_err {
+                                        Ok(msg) => {
+                                            match msg {
+                                                Message::Close(frame) => {
+                                                    let reason = if frame.is_none() {"it felt like it".to_string()} else {frame.unwrap().reason.into_owned()};
+                                                    info!("Websocket closed because {}", reason);
+                                                    break;
+                                                },
+                                                Message::Text(_) | Message::Binary(_) => {
+                                                    channels.0.send(ConsoleMessage{line: msg.into_text().unwrap_or_default(), is_echo: false}).unwrap();
+                                                },
+                                                _ => {}
+                                            }
+                                        },
+                                        Err(e) => {
+                                            println!("Got websocket message error: {:?}", e);
+                                            break;
+                                        }
+                                    }
+                                },
+                                None => {}
+                            }
+                        },
+                        Either::Right((console, _)) => {
+                            match console {
+                                Some(msg) => {
+                                    if let Err(e) = ws_stream.send(rocket_ws::Message::Text(rocket::serde::json::to_string(&msg).unwrap())).await {
+                                        error!("Websocket send failed: {:?}", e);
+                                        break;
+                                    }
+                                },
+                                None => {
+                                    info!("Got empty console message - channel closed.");
+                                    break;
+                                }
+                            }
+                        }
+                    };
+                }
+                Ok(())
+            }
+            Ok(resp) => {
+                error!("Got unexpected printer response: {:?}", resp);
+                Err(rocket_ws::result::Error::ConnectionClosed)
+            }
+            Err(e) => {
+                error!("Error getting response from printer: {:?}", e);
+                Err(rocket_ws::result::Error::ConnectionClosed)
+            }
+        }
+
+    }))
 }
 
 #[get("/")]
@@ -319,10 +381,9 @@ pub fn run_api(to_internal: Sender<PrinterCommand>, from_internal: Receiver<Prin
     .mount("/api", routes![connect, status, home, move_rel, upload_gcode, 
                                 list_gcode, set_gcode, delete_gcode, start_print, stop_print, 
                                 pause_print, set_temperature, set_fan_speed, 
-                                open_console, printer_info])
+                                console, printer_info])
     .mount("/", routes![index, serve_file])
     .manage(InternalComms{to_internal: to_internal, from_internal:from_internal})
-    .manage(WSConsoleState{console: Mutex::new(None)})
     .manage(data_dir as DataDir)
     .manage(WebUiDir(webui_dir))
     .attach(cors);

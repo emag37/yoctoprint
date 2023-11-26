@@ -3,7 +3,7 @@ use regex::Regex;
 use serialport::SerialPort;
 use std::io::*;
 use crate::internal_api;
-use enumset::{EnumSet, EnumSetType};
+use enumset::EnumSet;
 use internal_api::*;
 use log::{debug, info, error, warn};
 

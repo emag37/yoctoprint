@@ -1,5 +1,5 @@
 <script>
-    import { api_url, server_addr, status } from '../data';
+    import { console_url,  status } from '../data';
     import { tick } from 'svelte';
     import connectIcon from '../assets/connect.png';
     
@@ -27,39 +27,30 @@
     }
 
     function openConsole() {
-        fetch(api_url() + "open_console", {method: "POST", keepalive: true})
-        .then(resp => {
-            return resp.text()
-        }).then(port_str => {
-            isConnected = true;
-            socket = new WebSocket(`ws://${server_addr}:${port_str}`); 
-            socket.onclose = (_ev) => {
-                isConnected = false;
-            }
-            socket.onmessage = (msg_json) => {
-                let msg = JSON.parse(msg_json.data);
-                if (msg.is_echo) {
-                    msg.line = `> ${msg.line}`
-                }
-                textLines.push(msg.line);
-                while(textLines.length > bufferDepth) {
-                    textLines.shift();
-                }
-                textLines = textLines; // Svelte pls.
-                
-                const wasBottom = textArea.scrollHeight === textArea.clientHeight || textArea.scrollTop + textArea.clientHeight >= textArea.scrollHeight - 100;
-                if (wasBottom) {
-                    tick().then(() => {
-                        textArea.scrollTop = textArea.scrollHeight - textArea.clientHeight;
-                    });
-                    
-                }
-            }
-        })
-        .catch(err => {
+        isConnected = true;
+        socket = new WebSocket(console_url()); 
+        socket.onclose = (_ev) => {
             isConnected = false;
-            console.log(err);
-        });
+        }
+        socket.onmessage = (msg_json) => {
+            let msg = JSON.parse(msg_json.data);
+            if (msg.is_echo) {
+                msg.line = `> ${msg.line}`
+            }
+            textLines.push(msg.line);
+            while(textLines.length > bufferDepth) {
+                textLines.shift();
+            }
+            textLines = textLines; // Svelte pls.
+            
+            const wasBottom = textArea.scrollHeight === textArea.clientHeight || textArea.scrollTop + textArea.clientHeight >= textArea.scrollHeight - 100;
+            if (wasBottom) {
+                tick().then(() => {
+                    textArea.scrollTop = textArea.scrollHeight - textArea.clientHeight;
+                });
+                
+            }
+        }
     }
     
 </script>

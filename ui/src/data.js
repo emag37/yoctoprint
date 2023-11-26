@@ -25,6 +25,10 @@ export function send_api_cmd(method, path, body = null) {
 
 export const server_addr = window.location.hostname;
 
+export function console_url() {
+    return 'ws://' + server_addr + ":5000/api/console";
+}
+
 export function api_url() {
     return 'http://' + server_addr + ":5000/api/";
 }

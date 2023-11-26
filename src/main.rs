@@ -1,12 +1,14 @@
+#![feature(noop_waker)]
+
 use std::path::{PathBuf};
 use log::{debug, info, error, warn};
-use std::io::{Error,ErrorKind};
+use std::io::ErrorKind;
 use std::fs::File;
 use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
-use clap::{Parser, Arg};
+use clap::Parser;
 use daemonize::Daemonize;
 
 mod serial;
@@ -16,7 +18,7 @@ mod internal_api;
 mod printer;
 mod marlin;
 mod interval_timer;
-mod ws_console;
+mod recv_channel_async_wrapper;
 
 fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &internal_api::PrinterCommand, base_path: &PathBuf) -> internal_api::PrinterResponse{
     if printer.is_none() {

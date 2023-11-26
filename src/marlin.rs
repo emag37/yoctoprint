@@ -63,7 +63,7 @@ impl Marlin {
                 _ => {0}
             };
             
-            if let Some(mut res) = results.iter_mut().find(|elem| { elem.index == id && elem.measured_from == point}) {
+            if let Some(res) = results.iter_mut().find(|elem| { elem.index == id && elem.measured_from == point}) {
                 res.power = cap.get(2).unwrap().as_str().parse::<f64>().unwrap() / 127.;
             }
         }

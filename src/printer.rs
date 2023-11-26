@@ -10,7 +10,6 @@ use crate::file;
 use crate::marlin;
 
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::ops::Div;
 use std::time::Duration;
 use std::vec;
@@ -86,6 +85,7 @@ impl ExternalConsole {
         return ExternalConsole{rx_out: rx_out, tx_in: tx_in, pending_external_channels: Some((tx_out, rx_in)),is_connected: false};
     }  
 
+    #[allow(dead_code)]
     pub fn is_connected(&self) -> bool {
         return self.is_connected;
     }
@@ -531,7 +531,7 @@ impl Printer {
                         _ => {self.update_status_from_response(&resp);}
                     }
                 }
-                Err(e) => {
+                Err(_e) => {
                     break;
                 }
             }
@@ -738,7 +738,7 @@ impl PrinterControl for SimulatedPrinter {
         // Send next line
         self.print_timer.update();
         if !self.to_print.is_none() && std::time::Instant::now() - self.last_line_at >= self.gcode_send_interval {
-            let mut to_print = self.to_print.as_mut().unwrap();
+            let to_print = self.to_print.as_mut().unwrap();
 
             if to_print.cur_line_in_file < to_print.line_count {
                 to_print.cur_line_in_file += 1;

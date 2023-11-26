@@ -94,7 +94,7 @@ pub struct PrinterStatus {
     pub fan_speed: Vec<f64>
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct PrinterInfo {
     pub values: HashMap<String, String>,
 }
@@ -132,6 +132,7 @@ pub struct ConsoleMessage {
     pub line: String
 }
 
+#[derive(Debug)]
 pub enum PrinterResponse {
     GenericResult(std::io::Result<()>),
     Status(std::io::Result<PrinterStatus>),

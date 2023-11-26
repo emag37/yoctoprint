@@ -1,5 +1,5 @@
 use std::io::{BufReader, BufRead, Seek, Read};
-use std::ops::{Div, Add, Sub};
+use std::ops::Div;
 use std::str::FromStr;
 use std::vec::Vec;
 use std::path::{Path,PathBuf};
@@ -226,6 +226,7 @@ impl GCodeFile {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_progress(&self) -> (u32, u32, f64) {
         (self.cur_line_in_file, self.line_count, ((self.cur_line_in_file as f64) / (self.line_count as f64)) * 100.)
     }
