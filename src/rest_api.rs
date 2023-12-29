@@ -25,17 +25,24 @@ struct WebUiDir(PathBuf);
 
 type DataDir = PathBuf;
 
-struct ApiError(std::io::Error);
+#[derive(Serialize)]
+struct ApiError{
+    kind: String,
+    description: String
+}
 
 impl From<std::io::Error> for ApiError{
     fn from(err: std::io::Error) -> Self {
-        ApiError(err)
+        ApiError {
+            kind: err.kind().to_string(),
+            description: err.to_string()
+        }
     }
 }
 
 fn crossbeam_err_to_io_err<T>(crossbeam_err: T) -> ApiError 
 where T: std::error::Error + std::marker::Sync + std::marker::Send +'static{
-    ApiError(Error::new(ErrorKind::BrokenPipe, crossbeam_err))
+    ApiError::from(Error::new(ErrorKind::BrokenPipe, crossbeam_err))
 }
 
 fn resp_generic_result_or_err(crossbeam_result: Result<PrinterResponse, RecvError>) -> Result<(), ApiError> {
@@ -44,8 +51,8 @@ fn resp_generic_result_or_err(crossbeam_result: Result<PrinterResponse, RecvErro
             Ok(r) => {
                 match r {
                     PrinterResponse::GenericResult(Ok(())) => { Ok(())}
-                    PrinterResponse::GenericResult(Err(e)) => {Err(ApiError(Error::new(ErrorKind::NotFound, e)))}
-                    _ => {Err(ApiError(Error::new(ErrorKind::Unsupported, "Unexpected response")))}
+                    PrinterResponse::GenericResult(Err(e)) => {Err(ApiError::from(e))}
+                    _ => {Err(ApiError::from(Error::new(ErrorKind::Unsupported, "Unexpected response")))}
                 }
             }
         }
@@ -76,8 +83,8 @@ fn printer_info(comms: &State<InternalComms>) -> Result<Json<PrinterInfo>, ApiEr
         Ok(resp) => {
             match resp {
                 PrinterResponse::Info(Ok(info)) => { Ok(Json(info)) }
-                PrinterResponse::GenericResult(Err(e)) | PrinterResponse::Status(Err(e)) => {Err(ApiError(e))}
-                _ => {Err(ApiError(Error::new(ErrorKind::Unsupported, format!("Unexpected response"))))}
+                PrinterResponse::GenericResult(Err(e)) | PrinterResponse::Status(Err(e)) => {Err(ApiError::from(e))}
+                _ => {Err(ApiError::from(Error::new(ErrorKind::Unsupported, format!("Unexpected response"))))}
             }
         }
         Err(e) => {
@@ -96,8 +103,8 @@ fn status(comms: &State<InternalComms>) -> Result<Json<PrinterStatus>, ApiError>
         Ok(resp) => {
             match resp {
                 PrinterResponse::Status(Ok(status)) => { Ok(Json(status)) }
-                PrinterResponse::GenericResult(Err(e)) | PrinterResponse::Status(Err(e)) => {Err(ApiError(e))}
-                _ => {Err(ApiError(Error::new(ErrorKind::Unsupported, format!("Unexpected response"))))}
+                PrinterResponse::GenericResult(Err(e)) | PrinterResponse::Status(Err(e)) => {Err(ApiError::from(e))}
+                _ => {Err(ApiError::from(Error::new(ErrorKind::Unsupported, format!("Unexpected response"))))}
             }
         }
         Err(e) => {
@@ -160,10 +167,11 @@ struct FanSpeed {
 }
 #[post("/set_fan_speed", format = "application/json", data = "<fan_speed>")]
 fn set_fan_speed(comms: &State<InternalComms>, fan_speed : Json<FanSpeed>) -> Result<(), ApiError> {
-    if let Err(e) = comms.to_internal.send(PrinterCommand::SetFanSpeed((
-        fan_speed.index.unwrap_or(0),
-        fan_speed.speed
-    ))) {
+    if let Err(e) = comms.to_internal.send(PrinterCommand::SetFanSpeed(
+        FanSpeedTarget {
+            index: fan_speed.index.unwrap_or(0),
+            target: fan_speed.speed
+        })) {
         return Err(crossbeam_err_to_io_err(e));
     }
 
@@ -179,13 +187,13 @@ async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir
     full_path.push(filename);
     
     if std::path::Path::exists(full_path.as_path()) {
-        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("file already exists @ {:?}", full_path))));
+        return Err(ApiError::from(Error::new(std::io::ErrorKind::AlreadyExists, format!("file already exists @ {:?}", full_path))));
     }
     let stream = data.open(size_limit);
     let file = stream.into_file(full_path.as_path()).await?;
     
     if !file.is_complete() {
-        return Err(ApiError(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Unable to write entire file")));
+        return Err(ApiError::from(Error::new(std::io::ErrorKind::BrokenPipe, "Unable to write entire file")));
     }
     
     Ok(())
@@ -364,12 +372,11 @@ async fn serve_file(file: PathBuf, webui_dir: &State<WebUiDir>) -> Option<NamedF
 
 impl<'r> rocket::response::Responder<'r, 'static> for ApiError {
     fn respond_to(self, _request: &Request<'_>) -> rocket::response::Result<'static> {
-        let error_str = format!("Error: {:?}\nDescription: {:?}", self.0.kind(), self.0);
-
+        let as_string = rocket::serde::json::to_string(&self).unwrap();
         Ok(rocket::Response::build().
-        header(rocket::http::ContentType::HTML).
+        header(rocket::http::ContentType::JSON).
         status(rocket::http::Status::InternalServerError)
-        .sized_body(error_str.len(), std::io::Cursor::new(error_str))
+        .sized_body(as_string.len(), std::io::Cursor::new(as_string))
         .finalize())
     }
 }

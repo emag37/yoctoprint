@@ -86,10 +86,8 @@ function setTemperature(id, index, new_temp) {
     send_api_cmd("POST", "set_temperature", JSON.stringify({
         "to_set": id,
         "index" : index - 1,
-        "target" : new_temp
-    })).catch((err) => {
-        alert(err);
-    });
+        "target" : parseFloat(new_temp)
+    }));
 }
 </script>
 

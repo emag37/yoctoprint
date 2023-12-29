@@ -10,6 +10,7 @@
   import Modal from 'svelte-simple-modal';
   import YoctoprintConnectionModal from './lib/YoctoprintConnectionModal.svelte';
   import PrinterConnectionModal from './lib/PrinterConnectionModal.svelte';
+  import Errorlist from './lib/Errorlist.svelte';
   const modal = writable(null);
 
   $: {
@@ -47,6 +48,7 @@
         <Console />
       </div>
     </div>
+    <Errorlist/>
   </Modal>
 </main>
 

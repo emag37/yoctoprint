@@ -6,6 +6,25 @@ use serde::Deserialize;
 use enumset::{EnumSetType, EnumSet};
 use crossbeam::channel::{Sender, Receiver};
 
+pub trait Validator {
+    fn validate(&self) -> std::io::Result<()>;
+}
+
+macro_rules! add_validator {
+    // The pattern for a single `eval`
+    ($x:ty, $field:ident,  $min:literal, $max:literal) => {
+        impl Validator for $x {
+
+            fn validate(&self) -> std::io::Result<()> {
+                if self.$field > $max || self.$field < $min {
+                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Invalid value, must be between {} and {}", $min, $max)));
+                }
+                return Ok(());
+            }
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileInfo {
     pub last_modified_since_epoch: std::time::Duration,
@@ -69,6 +88,17 @@ pub struct TemperatureTarget {
     pub target: f64
 }
 
+add_validator!(TemperatureTarget, target, 0., 400. );
+
+#[derive(Debug)]
+#[derive(PartialEq)]
+#[derive(Copy, Clone, Deserialize)]
+pub struct FanSpeedTarget {
+    pub index: u32,
+    pub target: f64
+}
+add_validator!(FanSpeedTarget, target, 0., 1. );
+
 
 #[derive(Debug)]
 #[derive(PartialEq)]
@@ -119,7 +149,7 @@ pub enum PrinterCommand {
     ManualMove(Position),
     Home(EnumSet<Axis>),
     SetTemperature(TemperatureTarget),
-    SetFanSpeed((u32, f64)),
+    SetFanSpeed(FanSpeedTarget),
     OpenConsole,
     GetPrinterInfo
 }

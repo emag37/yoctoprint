@@ -1,5 +1,6 @@
 import { onMount } from 'svelte';
 import { writable, readable, derived } from 'svelte/store';
+import {notify} from './lib/Errorlist.svelte'
 
 let refreshStatus = null;
 
@@ -11,6 +12,9 @@ export function fetch_api(method, path, body = null) {
     },
     body : body, keepalive: true})
     .then(resp => resp.json())
+    .catch(err => {
+        notify(err);
+    })
 }
 
 export function send_api_cmd(method, path, body = null) {
@@ -20,7 +24,17 @@ export function send_api_cmd(method, path, body = null) {
         'content-type' : 'application/json'
     },
     body : body, keepalive: true})
-    .then(refreshStatus)
+    .then((rsp) => {
+        if (!rsp.ok) {
+            rsp.json().then(err => {
+                notify(`${err.description}`)
+            })
+        }
+        refreshStatus();
+    })
+    .catch(err => {
+        notify(err);
+    });
 }
 
 export const server_addr = window.location.hostname;
@@ -50,6 +64,7 @@ const status = readable(default_status, (set) => {
         }).catch(err => {
             set(default_status);
             console.error(err);
+            notify(err);
         });
 
     let refreshInterval = () => refreshStatus().then(() => {setTimeout(() => {refreshInterval()}, 1000)});

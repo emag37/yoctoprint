@@ -1,9 +1,11 @@
 use crate::internal_api::Axis;
 use crate::internal_api::ConsoleMessage;
+use crate::internal_api::FanSpeedTarget;
 use crate::internal_api::Position;
 use crate::internal_api::PrinterInfo;
 use crate::internal_api::Temperature;
 use crate::internal_api::TemperatureTarget;
+use crate::internal_api::Validator;
 use crate::serial;
 use crate::internal_api;
 use crate::file;
@@ -35,7 +37,7 @@ pub trait PrinterControl {
     fn go_home(&mut self, axes: &EnumSet<Axis>) -> Result<()>;
     fn move_relative(&mut self, new_pos: &Position) -> Result<()>;
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()>;
-    fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()>;
+    fn set_fan_speed(&mut self, new_fan_speed: &FanSpeedTarget) -> Result<()>;
     fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>);
     fn get_info(&self) -> Result<PrinterInfo>;
 }
@@ -180,6 +182,7 @@ struct PositionData {
     saved: Position, // For pause/resume
     move_mode_xyz_e: (PositionMode, PositionMode),
 }
+
 
 pub struct Printer {
     pub comms: serial::PrinterComms,
@@ -393,6 +396,8 @@ impl PrinterControl for Printer {
     }
 
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()> {
+        new_temp.validate()?;
+
         if matches!(self.state, PrintState::DEAD) {
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Temperature cannot be modified from this state ({:?})!", self.state)));
         }
@@ -415,14 +420,12 @@ impl PrinterControl for Printer {
         Ok(())
     }
 
-    fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()> {
-        info!("Set fan {} to speed {}", index, speed);
+    fn set_fan_speed(&mut self, new_fan_speed: &FanSpeedTarget) -> Result<()> {
+        new_fan_speed.validate()?;
 
-        if speed < 0. || speed > 1. {
-            return Err(Error::new(std::io::ErrorKind::InvalidInput, "Fan speed must be between 0 and 1."));
-        }
+        info!("Set fan {} to speed {}", new_fan_speed.index, new_fan_speed.target);
 
-        if let Err(e) = self.send_cmd_read_until_response(self.protocol.get_fan_speed_cmd(index, speed).as_str(), None) {
+        if let Err(e) = self.send_cmd_read_until_response(self.protocol.get_fan_speed_cmd(new_fan_speed.index, new_fan_speed.target).as_str(), None) {
             return Err(e);
         }
             
@@ -854,6 +857,8 @@ impl PrinterControl for SimulatedPrinter {
     }
 
     fn set_temperature(&mut self, new_temp: &TemperatureTarget) -> Result<()> {
+       new_temp.validate()?;
+
        for temp in &mut self.temperatures {
         if temp.measured_from == new_temp.to_set {
             temp.target = new_temp.target;
@@ -863,13 +868,15 @@ impl PrinterControl for SimulatedPrinter {
        Ok(())
     }
 
-    fn set_fan_speed(&mut self, index: u32, speed: f64) -> Result<()> {
-        let vec_idx = index as usize;
+    fn set_fan_speed(&mut self, new_fan_speed: &FanSpeedTarget) -> Result<()> {
+        new_fan_speed.validate()?;
+
+        let vec_idx = new_fan_speed.index as usize;
         if vec_idx > self.fan_speeds.len() {
             self.fan_speeds.resize((vec_idx + 1) as usize, 0.);
         }
 
-        self.fan_speeds[vec_idx] = speed;
+        self.fan_speeds[vec_idx] = new_fan_speed.target;
         Ok(())
     }
 
