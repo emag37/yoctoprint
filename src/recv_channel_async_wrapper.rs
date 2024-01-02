@@ -3,6 +3,7 @@ use std::{task::Waker, sync::{Arc, Mutex}, time::Duration};
 use crossbeam::channel::Receiver;
 use log::error;
 use rocket::futures::Stream;
+use noop_waker::noop_waker; // I will be included in Task::Waker eventually...
 
 struct SharedState<T> {
     next_value: Option<T>,
@@ -19,7 +20,7 @@ impl<T> RecvChannelAsyncWrapper<T> where T: Send + 'static {
     fn poll_channel(shared_state: Arc<Mutex<SharedState<T>>>, receiver: Receiver<T>) {
         loop {
             let next_value_empty;
-            let mut next_waker = Waker::noop();
+            let mut next_waker = noop_waker();
 
             {
                 let locked = shared_state.lock().unwrap();
@@ -54,7 +55,7 @@ impl<T> RecvChannelAsyncWrapper<T> where T: Send + 'static {
     }
 
     pub fn new(receiver: Receiver<T>) -> Self {
-        let shared_state = Arc::new(Mutex::new(SharedState { next_value: None, next_waker: Waker::noop(), run: true }));
+        let shared_state = Arc::new(Mutex::new(SharedState { next_value: None, next_waker: noop_waker(), run: true }));
         let shared_state_for_thread: Arc<Mutex<SharedState<T>>> = shared_state.clone();
 
         let reader_fn = move || {

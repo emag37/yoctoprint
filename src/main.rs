@@ -1,5 +1,3 @@
-#![feature(noop_waker)]
-
 use std::path::{PathBuf};
 use log::{debug, info, error, warn};
 use std::io::ErrorKind;
