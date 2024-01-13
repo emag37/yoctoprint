@@ -18,17 +18,35 @@
     let lines_done = 0;
     let lines_total = 1;
     let time_remaining;
+    let time_elapsed = null;
+    
+
+    const PAUSEABLE_STATES = ["STARTED"];
+
+    const STARTABLE_STATES = ["CONNECTED", "PAUSED", "DONE"];
+
+    const STOPPABLE_STATES = ["STARTED", "PAUSED", "DONE"];
+
+    function duration_to_string(duration) {
+        let duration_secs = duration.secs + duration.nanos * 1e-9;
+        return new Date(duration_secs * 1000).toISOString().slice(11,19);
+    }
 
     const unsubscribe = status.subscribe(new_status => {
         if (new_status.host_connected && new_status.gcode_lines_done_total) {
             [current_gcode, lines_done, lines_total] = new_status.gcode_lines_done_total;
             gcode_loaded = true;
-            let time_remaining_secs = new_status.print_time_remaining.secs + new_status.print_time_remaining.nanos * 1e-9;
-            time_remaining = new Date(time_remaining_secs * 1000).toISOString().slice(11,19);
+            time_remaining = duration_to_string(new_status.print_time_remaining);
         } else {
             current_gcode = NO_GCODE_MSG;
             gcode_loaded = false;
             time_remaining = "Unavailable";
+        }
+
+        if (new_status.print_time_elapsed != null) {
+            time_elapsed = duration_to_string(new_status.print_time_elapsed);
+        } else {
+            time_elapsed = null;
         }
     });
 
@@ -46,12 +64,6 @@
         text = text.toLowerCase();
         return text.charAt(0).toUpperCase() + text.slice(1);
     }
-
-    const PAUSEABLE_STATES = ["STARTED"];
-
-    const STARTABLE_STATES = ["CONNECTED", "PAUSED", "DONE"];
-
-    const STOPPABLE_STATES = ["STARTED", "PAUSED", "DONE"];
 
     function stop_print() {
         new Promise((resolve, reject) => {
@@ -82,7 +94,7 @@
         {#if gcode_loaded}
             <progress class="progress_bar" value={lines_done / lines_total}></progress>
 
-            <div class="time_remaining">{lowerCase($status.state)}, ETA: {time_remaining}</div>
+            <div class="time_remaining">{lowerCase($status.state)}, ETA: {time_remaining} {#if time_elapsed != null}, Elapsed: {time_elapsed}{/if}</div>
             {#if $status.state == "CONNECTED" || $status.state == "PAUSED" || $status.state == "DONE" || $status.state == "STARTED"}
                 
                 <button disabled={!STARTABLE_STATES.includes($status.state)} title="Start Printing" on:click={ () => {

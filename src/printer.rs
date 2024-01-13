@@ -235,6 +235,11 @@ impl PrinterControl for Printer {
             None => None
         };
 
+        let time_elapsed = match &self.state {
+            PrintState::STARTED | PrintState::PAUSED | PrintState::DONE => Some(self.print_timer.elapsed()),
+            _=> None
+        };
+        
         Ok(internal_api::PrinterStatus{ 
             printer_connected: true,
             manual_control_enabled: self.can_move_manually(), 
@@ -246,6 +251,7 @@ impl PrinterControl for Printer {
                 None => None
             },
             print_time_remaining: time_remaining,
+            print_time_elapsed : time_elapsed,
             fan_speed: self.fan_speeds.clone()
         })
     }
@@ -738,17 +744,19 @@ impl PrinterControl for SimulatedPrinter {
             },
             None => {}
         }
-        // Send next line
-        self.print_timer.update();
-        if !self.to_print.is_none() && std::time::Instant::now() - self.last_line_at >= self.gcode_send_interval {
-            let to_print = self.to_print.as_mut().unwrap();
+        if self.state == PrintState::STARTED {
+            // Send next line
+            self.print_timer.update();
+            if !self.to_print.is_none() && std::time::Instant::now() - self.last_line_at >= self.gcode_send_interval {
+                let to_print = self.to_print.as_mut().unwrap();
 
-            if to_print.cur_line_in_file < to_print.line_count {
-                to_print.cur_line_in_file += 1;
-            } else if self.state == PrintState::STARTED {
-                self.state = PrintState::DONE;
+                if to_print.cur_line_in_file < to_print.line_count {
+                    to_print.cur_line_in_file += 1;
+                } else if self.state == PrintState::STARTED {
+                    self.state = PrintState::DONE;
+                }
+                self.last_line_at = std::time::Instant::now();
             }
-            self.last_line_at = std::time::Instant::now();
         }
 
         // Update status
@@ -774,6 +782,10 @@ impl PrinterControl for SimulatedPrinter {
             }
             None => None
         };
+        let time_elapsed = match &self.state {
+            PrintState::STARTED | PrintState::PAUSED | PrintState::DONE => Some(self.print_timer.elapsed()),
+            _=> None
+        };
 
         Ok(internal_api::PrinterStatus{ 
             printer_connected: true,
@@ -785,6 +797,7 @@ impl PrinterControl for SimulatedPrinter {
                 Some(p) => {Some((p.path.file_name().unwrap().to_str().unwrap().to_string(), p.cur_line_in_file, p.line_count))}
                 None => None
             },
+            print_time_elapsed: time_elapsed,
             print_time_remaining: time_remaining,
             fan_speed: self.fan_speeds.clone()})
     }
