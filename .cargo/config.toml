@@ -1,8 +1,7 @@
-[target.arm-unknown-linux-gnueabihf]
-linker = "arm-poky-linux-gnueabi-gcc"
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
 rustflags = [
 "-C", "link-arg=-mcpu=cortex-a8",
 "-C", "link-arg=-mfpu=neon",
-"-C", "link-arg=-mfloat-abi=hard",
-"-C", "link-arg=--sysroot=/opt/beaglebone-octoprint/3.1.21/sysroots/cortexa8hf-neon-poky-linux-gnueabi",
+"-C", "link-arg=-mfloat-abi=hard"
 ]

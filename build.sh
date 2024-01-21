@@ -7,9 +7,14 @@ RELEASE_PKG_DIR="pkg"
 if [[ $1 != "" ]] && [[ $1 == "arm" ]]; then
     RELEASE_PKG_DIR="${RELEASE_PKG_DIR}_arm"
     BUILD_DIR="target/arm-unknown-linux-gnueabihf/release"
+    SYSROOT=/mnt/sshfs
 
-    . /opt/beaglebone-octoprint/3.1.21/environment-setup-cortexa8hf-neon-poky-linux-gnueabi
-    cargo build --target arm-unknown-linux-gnueabihf -Zbuild-std --release
+    export PKG_CONFIG_DIR=
+    export PKG_CONFIG_LIBDIR=${SYSROOT}/usr/lib/arm-linux-gnueabihf/pkgconfig:${SYSROOT}/usr/share/pkgconfig
+    export PKG_CONFIG_SYSROOT_DIR=${SYSROOT}
+    export PKG_CONFIG_ALLOW_CROSS=1
+    #. /opt/beaglebone-octoprint/3.1.21/environment-setup-cortexa8hf-neon-poky-linux-gnueabi
+    cargo build --target arm-unknown-linux-gnueabihf --release
 else
     BUILD_DIR="target/debug"
 
