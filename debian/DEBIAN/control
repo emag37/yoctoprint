@@ -1,0 +1,7 @@
+Package: yoctoprint
+Version: 0.1.0
+Architecture: armhf
+Depends: libc6
+Maintainer: Eric <eric@example.com>
+Description: Yoctoprint
+ A lightweight 3D printer control and monitoring web UI.

@@ -2,31 +2,38 @@
 
 set -e
 
-RELEASE_PKG_DIR="pkg"
+VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')
 
 if [[ $1 != "" ]] && [[ $1 == "arm" ]]; then
-    RELEASE_PKG_DIR="${RELEASE_PKG_DIR}_arm"
-    BUILD_DIR="target/arm-unknown-linux-gnueabihf/release"
-    SYSROOT=/mnt/sshfs
-
-    export PKG_CONFIG_DIR=
-    export PKG_CONFIG_LIBDIR=${SYSROOT}/usr/lib/arm-linux-gnueabihf/pkgconfig:${SYSROOT}/usr/share/pkgconfig
-    export PKG_CONFIG_SYSROOT_DIR=${SYSROOT}
+    BUILD_DIR="target/armv7-unknown-linux-gnueabihf/release"
+    DEB_ARCH="armhf"
+    
+    export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
     export PKG_CONFIG_ALLOW_CROSS=1
-    #. /opt/beaglebone-octoprint/3.1.21/environment-setup-cortexa8hf-neon-poky-linux-gnueabi
-    cargo build --target arm-unknown-linux-gnueabihf --release
+   
+    cargo build --target armv7-unknown-linux-gnueabihf --release
 else
     BUILD_DIR="target/debug"
+    DEB_ARCH="amd64"
 
     cargo build
 fi
 
 cd ui
+npm install
 npm run build
-
 cd ..
-mkdir -p ${RELEASE_PKG_DIR}/ui
-cp -r ui/dist ${RELEASE_PKG_DIR}/ui
-cp ${BUILD_DIR}/yoctoprint ${RELEASE_PKG_DIR}/
-cp Rocket.toml ${RELEASE_PKG_DIR}/
-tar -czf ${RELEASE_PKG_DIR}.tar.gz ${RELEASE_PKG_DIR}
+
+if [[ $1 != "" ]] && [[ $1 == "arm" ]]; then
+
+    # Build .deb package on arm
+    echo "Building .deb package..."
+
+    cp -v Rocket.toml debian/usr/local/share/yoctoprint/ui/dist/
+    cp ${BUILD_DIR}/yoctoprint debian/usr/local/bin/
+    cp -r ui/dist/* debian/usr/local/share/yoctoprint/ui/dist/
+    dpkg-deb --root-owner-group --build debian
+    DEB_FILE="yoctoprint_${VERSION}_${DEB_ARCH}.deb"
+    mv -v debian.deb "${DEB_FILE}"
+    echo "Debian package created: ${DEB_FILE}"
+fi

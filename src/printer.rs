@@ -230,7 +230,7 @@ impl PrinterControl for Printer {
     fn get_status(&self) -> Result<internal_api::PrinterStatus>{
         let time_remaining = match &self.to_print {
             Some(p) => {
-                p.get_remaining_time(self.print_timer.elapsed())
+                p.get_remaining_time()
             }
             None => None
         };
@@ -509,7 +509,7 @@ impl Printer {
         }
         
         let (next_line_no, cmd) = 
-        match self.to_print.as_mut().unwrap().next_line() {
+        match self.to_print.as_mut().unwrap().next_line(Some(self.print_timer.elapsed())) {
             Ok(line) => {(line.0, line.1.to_owned())}
             Err(e) => {return Err(e);}
         };
@@ -778,7 +778,7 @@ impl PrinterControl for SimulatedPrinter {
     fn get_status(&self) -> Result<internal_api::PrinterStatus> {
         let time_remaining = match &self.to_print {
             Some(p) => {
-                p.get_remaining_time(self.print_timer.elapsed())
+                p.get_remaining_time()
             }
             None => None
         };

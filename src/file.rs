@@ -5,7 +5,7 @@ use std::vec::Vec;
 use std::path::{Path,PathBuf};
 use std::fs::{File};
 use log::{debug, info};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
 use crate::internal_api::{self, FileInfo};
@@ -57,12 +57,112 @@ pub struct GCodeFile {
     pub last_line: String,
     pub command_line_no: u32, // Keeps track of lines of actual GCode commands
     pub resend_last: bool,
-    print_duration: Option<PrintDurationEstimator>
+    print_duration: Option<PrintDurationEstimator2>
 }
 
 const TIME: &str = ";TIME:";
 const TIME_ELAPSED: &str = ";TIME_ELAPSED:";
+const LAYER: &str = ";LAYER:";
 
+
+#[derive(Debug, Clone, Default)]
+struct LayerDuration {
+    layer: u32,
+    line_start: u32,
+    line_end_exclusive: u32,
+    duration: Duration
+}
+
+struct PrintDurationEstimator2 {
+    curr_layer_entered_at: Duration,
+    curr_layer: LayerDuration,
+    layer_durations: Vec<LayerDuration>,
+    total_time: Duration,
+    remaining_time: Duration,
+    error: f64
+}
+
+impl PrintDurationEstimator2 {
+    pub fn new<R: Read>(file_lines: BufReader<R>) -> Self {
+        let mut total_time = None;
+        let mut curr_layer_duration = LayerDuration::default();
+        
+        let mut layer_duration_list: Vec<LayerDuration> = Vec::new();
+
+        for (line_no, line) in file_lines.lines().enumerate() {
+            match line {
+                Ok(line_str) => {
+                    if line_str.starts_with(LAYER) {
+                        let curr_layer = GCodeFile::parse_metadata::<u32>(&line_str, LAYER).unwrap_or_default();
+                        curr_layer_duration.line_end_exclusive = line_no as u32;
+
+                        if curr_layer != 0 {
+                            curr_layer_duration.line_end_exclusive = line_no as u32;
+                            info!("New layer duration {curr_layer_duration:?}");
+                            layer_duration_list.push(curr_layer_duration);
+                            
+                            curr_layer_duration = LayerDuration::default();
+                        }
+                        curr_layer_duration.layer = curr_layer;
+                        curr_layer_duration.line_start = line_no as u32;
+                    } else if line_str.starts_with(TIME_ELAPSED) {
+                        let time_point = GCodeFile::parse_metadata::<f64>(&line_str, TIME_ELAPSED).unwrap_or_default();
+                        curr_layer_duration.duration = Duration::from_secs_f64(time_point);
+                    } else if line_str.starts_with(TIME) {
+                        let total_time_secs = GCodeFile::parse_metadata::<f64>(&line_str, TIME).unwrap_or_default();
+                        info!("Total time: {:?}", Duration::from_secs_f64(total_time_secs));
+                        total_time = Some(Duration::from_secs_f64(total_time_secs));
+                    }
+                },
+                Err(e) => {
+                    error!("Error reading line from file: {:?}", e);
+                    continue;
+                }
+            }
+            
+        }
+
+        let first_layer_duration = layer_duration_list.first().cloned().unwrap_or_default();
+        return Self {layer_durations: layer_duration_list, total_time: total_time.unwrap_or(Duration::from_hours(666)), remaining_time: Duration::from_hours(666), curr_layer: first_layer_duration, curr_layer_entered_at: Duration::ZERO, error: 1.0};
+    }
+    
+    pub fn get_remaining_time(&self) -> Duration {
+        self.remaining_time
+    }
+
+    pub fn update_remaining_time(&mut self, cur_line_in_file: u32, cur_t: Duration) {
+        let found = self.layer_durations.iter()
+            .find(|layer| cur_line_in_file >= layer.line_start && cur_line_in_file < layer.line_end_exclusive);
+
+        match found {
+            Some(next_layer) => {
+                if self.curr_layer.layer != next_layer.layer {
+
+                    let expected_time = self.curr_layer.duration.as_secs_f64() - self.curr_layer_entered_at.as_secs_f64();
+                    let actual_time = cur_t.as_secs_f64() - self.curr_layer_entered_at.as_secs_f64();
+                    let layer_error = actual_time - expected_time;
+                    info!("Layer {} expected time: {:?}, actual time: {:?}, layer error: {}", self.curr_layer.layer, expected_time, actual_time, layer_error);
+                    self.error = self.error * 0.6 + layer_error * 0.4;
+                    info!("Entering layer {} at time {:?} (line {}). Adjustment factor: {}", next_layer.layer, cur_t, cur_line_in_file, self.error);
+                    self.curr_layer = next_layer.clone();
+                    self.curr_layer_entered_at = cur_t;
+                }
+
+                self.remaining_time = Duration::from_secs_f64((self.total_time.saturating_sub(cur_t).as_secs_f64() + self.error).max(0.));
+            },
+            None => {
+                self.remaining_time = self.total_time.saturating_sub(cur_t);
+            }
+        }
+
+    }
+
+    pub fn get_last_time_point_duration(&self) -> (u32, Duration){
+        self.layer_durations.last().map(|d|{
+            (d.line_end_exclusive, d.duration)
+        }).unwrap_or((0, Duration::ZERO))
+    }
+}
 struct PrintDurationEstimator {
     line_no_elapsed: std::vec::Vec<(u32, Duration)>,
     this_line_no_elapsed_idx: RefCell<usize>
@@ -91,7 +191,7 @@ impl PrintDurationEstimator{
             }
         }
     }
-
+    
     pub fn get_remaining_time(&self, cur_line_in_file: u32, cur_t: Duration) -> Duration {
         let cur_t_f64 = cur_t.as_secs_f64();
         // Increment the index until the timepoint is after the current line
@@ -141,38 +241,22 @@ impl GCodeFile {
     pub fn new(gcode_file: &Path) -> std::io::Result<GCodeFile> {
         match File::open(gcode_file) {
             Err(e) => Err(e),
-            Ok(f) => {
-                let mut ret_file = GCodeFile{line_count:0 as u32, 
-                    cur_line_in_file: 0, file: BufReader::new(f), 
+            Ok(mut f) => {
+                let reader = BufReader::new(&f);
+
+                let estimator = PrintDurationEstimator2::new(reader);
+
+                let _ = f.rewind();
+                let reader = BufReader::new(f);
+                let ret_file = GCodeFile{line_count:0 as u32, 
+                    cur_line_in_file: 0, file: reader, 
                     path:gcode_file.to_path_buf(), 
                     last_line: String::new(), 
                     command_line_no: 0, 
                     resend_last:false,
-                    print_duration: Some(PrintDurationEstimator::new())};
+                    print_duration: Some(estimator)};
 
-                let reader = BufReader::new(ret_file.file.by_ref());
-                let mut total_time: f64 = -1.;
-                
-                for line in reader.lines() {
-                    let line_str = line.unwrap();
-                    ret_file.line_count += 1;
-
-                    if line_str.starts_with(TIME) {
-                        total_time = GCodeFile::parse_metadata::<f64>(&line_str, TIME).unwrap_or_default();
-                    } else if line_str.starts_with(TIME_ELAPSED) {
-                        let time_point = GCodeFile::parse_metadata::<f64>(&line_str, TIME_ELAPSED).unwrap_or_default();
-                        ret_file.print_duration.as_mut().unwrap().add_time_point(time_point, ret_file.line_count);
-                    }
-                }
-
-                if total_time > 0. {
-                    ret_file.print_duration.as_mut().unwrap().add_time_point(total_time, ret_file.line_count);
-                } else if ret_file.print_duration.as_ref().unwrap().count_points() == 0 {
-                    ret_file.print_duration = None;
-                }
-                
-                ret_file.file.rewind().unwrap();
-                
+               
                 Ok(ret_file)
             }
         }
@@ -188,12 +272,12 @@ impl GCodeFile {
             self.command_line_no = 0;
 
             while self.command_line_no < gcode_lineno - 1 {
-                self.next_line().expect("Failed to fetch next line");
+                self.next_line(None).expect("Failed to fetch next line");
             }
         }
     }
 
-    pub fn next_line(&mut self) -> std::io::Result<(u32, &str)> {
+    pub fn next_line(&mut self, cur_t: Option<Duration>) -> std::io::Result<(u32, &str)> {
         if self.resend_last {
             self.resend_last = false;
             return Ok((self.command_line_no, &self.last_line));
@@ -211,6 +295,11 @@ impl GCodeFile {
                         ret_line.truncate(semicolon_pos);
                     }
 
+                    if let Some(t) = cur_t {
+                        if let Some(estimator) = &mut self.print_duration {
+                            estimator.update_remaining_time(self.cur_line_in_file, t);
+                        }
+                    }
                     self.cur_line_in_file +=1;
                     if ret_line.len() == 0 {
                         continue
@@ -235,10 +324,10 @@ impl GCodeFile {
         self.path.file_name().unwrap_or_default().to_str().unwrap_or_default()
     }
 
-    pub fn get_remaining_time(&self, cur_time_secs: Duration) -> Option<Duration> {
+    pub fn get_remaining_time(&self) -> Option<Duration> {
         match &self.print_duration {
             Some(estimator) => {
-                Some(estimator.get_remaining_time(self.cur_line_in_file, cur_time_secs))
+                Some(estimator.get_remaining_time())
             }
             None => None
         }
@@ -323,16 +412,20 @@ mod tests {
 
     #[test]
     fn estimator_real_file() {
-        
+        simple_logger::init_with_level(log::Level::Debug).unwrap();
         let mut file = GCodeFile::new(&std::env::current_dir().unwrap().join(Path::new("samples/PSME_cane-clip-2.gcode"))).expect("Cannot open sample file!");
-        
-        while file.get_progress().0 < 223400 {
-            let _ = file.next_line().unwrap();
-            
-        }
-        let remaining = file.get_remaining_time(Duration::from_secs(7792)).unwrap();
 
-        assert_approx_eq!(remaining.as_secs_f64(), 60.45, EPSILON);
+        let time_per_line = Duration::from_secs_f64(7860.0 / 225217.0);
+        let mut cur_t = Duration::ZERO;
+        // Partway through layer 98
+        while file.get_progress().0 < 91007 {
+            let _ = file.next_line(Some(cur_t)).unwrap();
+            cur_t += time_per_line;
+        }
+        let remaining = file.get_remaining_time().unwrap();
+
+        assert!(remaining.as_secs_f64() < 7860.0);
+        assert!(remaining.as_secs_f64() > 4000.);
         println!("{:?}", remaining);
     }
 }

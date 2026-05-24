@@ -1,0 +1,14 @@
+[Unit]
+Description=Yoctoprint
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/usr/local/share/yoctoprint
+ExecStart=/usr/local/bin/yoctoprint --web-ui /usr/local/share/yoctoprint/ui/dist
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
