@@ -2,6 +2,8 @@ extern crate lazy_static;
 use regex::Regex;
 use serialport::SerialPort;
 use std::io::*;
+use std::fs;
+use std::path::PathBuf;
 use crate::internal_api;
 use enumset::EnumSet;
 use internal_api::*;
@@ -214,6 +216,45 @@ pub fn find_printer() -> std::io::Result<PrinterComms> {
         Err(_) => {error!("Cannot scan ports!")}
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        // Linux-specific: Search /dev/serial also
+        let mut serial_port_paths: Vec<PathBuf> = Vec::new();
+
+        if let Ok(entries) = fs::read_dir("/dev/serial") {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if !path.is_dir() {
+                        // At this point, should have two directories: by-id and by-path, skip anything else
+                        continue;
+                    }
+                    if let Ok(read_dir) = fs::read_dir(path) {
+                        for sub_entry in read_dir {
+                            if let Ok(sub_entry) = sub_entry {
+                                let sub_path = sub_entry.path();
+                                if !sub_path.is_dir() {
+                                    serial_port_paths.push(sub_path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        debug!("Found serial port paths in /dev/serial: {:?}", serial_port_paths);
+        for baud in BAUD_RATES {
+            for spp in &serial_port_paths {
+                if let Some(spp_str) = spp.to_str() {
+                    if let Ok(comms) = PrinterComms::new(spp_str, *baud) {
+                        return Ok(comms);
+                    }
+                }
+            }
+        }
+
+    }
     return Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         "Failed to scan ports"
