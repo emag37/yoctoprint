@@ -5,6 +5,7 @@ RUN rustup target add armv7-unknown-linux-gnueabihf
 RUN dpkg --add-architecture armhf && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
+	libudev-dev \
         gcc-arm-linux-gnueabihf \
         libc6-dev:armhf \
         libudev-dev:armhf \
