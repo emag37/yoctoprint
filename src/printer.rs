@@ -23,6 +23,8 @@ use std::io::{BufRead,Result};
 use std::path::PathBuf;
 use enumset::{EnumSet,enum_set};
 
+const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+
 pub trait PrinterControl {
     fn read_from_printer(&mut self) -> std::io::Result<Response>;
     fn send_to_printer(&mut self, data: &str) -> std::io::Result<usize>;
@@ -196,6 +198,7 @@ pub struct Printer {
     print_timer: PrintTimer,
     fan_speeds: Vec<f64>,
     external_console: ExternalConsole,
+    consecutive_errors: u32
 }
 
 impl PrinterControl for Printer {
@@ -449,12 +452,26 @@ impl PrinterControl for Printer {
             None => {}
         }
         
-        if self.state == PrintState::STARTED {
-            return self.print_next_line();
+        let result = if self.state == PrintState::STARTED {
+            self.print_next_line()
         } else {
-            self.poll_new_status();
-            Ok(())
+            self.poll_new_status()
+        };
+
+        match result {
+            Ok(()) => {
+                self.consecutive_errors = 0;
+            },
+            Err(e) => {
+                self.consecutive_errors += 1;
+                error!("Error performing next action: {e:?}. Consecutive error count: {}/{}", self.consecutive_errors, MAX_CONSECUTIVE_ERRORS);
+                if self.consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    return Err(Error::new(std::io::ErrorKind::Other, "Maximum consecutive errors reached"));
+                }
+            }
         }
+               
+        Ok(())
     }
 
     fn create_external_console(&mut self) -> (Sender<ConsoleMessage>, Receiver<ConsoleMessage>) {
@@ -476,7 +493,7 @@ impl Printer {
                 homed_axes:EnumSet::new(), temperatures: Vec::new(), position: PositionData::default(),
                 is_busy: false,
                 print_timer: PrintTimer::new(),
-                fan_speeds: vec![0.], external_console: ExternalConsole::new()};
+                fan_speeds: vec![0.], external_console: ExternalConsole::new(), consecutive_errors: 0};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
@@ -496,8 +513,7 @@ impl Printer {
         self.print_timer.update();
         
         if self.is_busy {
-            self.poll_new_status();
-            return Ok(())
+            return self.poll_new_status();
         }
         
         if self.to_print.is_none() {
@@ -523,25 +539,25 @@ impl Printer {
         
     }
 
-    fn poll_new_status(&mut self) {
+    fn poll_new_status(&mut self) -> std::io::Result<()> {
         loop {
             match self.read_from_printer() {
                 Ok(resp) => {
                     match resp {
                         serial::Response::BUSY => {
                             self.is_busy = true;
-                            break;
+                            return Ok(());
                         }
                         serial::Response::OK => {
                             self.is_busy = false;
-                            break;
+                            return Ok(());
                         }
-                        serial::Response::NONE => {break;}
+                        serial::Response::NONE => {return Ok(());}
                         _ => {self.update_status_from_response(&resp);}
                     }
                 }
-                Err(_e) => {
-                    break;
+                Err(e) => {
+                    return Err(e);
                 }
             }
         }

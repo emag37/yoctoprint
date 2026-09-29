@@ -207,7 +207,10 @@ fn main() {
         }
 
         if let Some(ref mut cur_printer) = printer {
-           cur_printer.next_action().expect("Error performing next printer action!");
+           if let Err(e) = cur_printer.next_action() {
+               error!("Error performing next printer action: {:?}. Resetting printer!", e);
+               printer = None;
+           }
         } else if scan_timer.check() {
             info!("Looking for printer...");
             if let Ok(found) = serial::find_printer() {
