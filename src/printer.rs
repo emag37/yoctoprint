@@ -265,9 +265,11 @@ impl PrinterControl for Printer {
     
     fn set_gcode_file(&mut self, abs_path: &PathBuf) -> Result<()> {
         if self.state != PrintState::CONNECTED && self.state != PrintState::DONE {
+            log::warn!("Attempted to set G-code file while printer is in state: {:?}", self.state);
             return Err(Error::new(std::io::ErrorKind::InvalidInput, format!("Cannot set gcode file in this state ({:?})!", self.state)));
         }
-       
+        
+        log::info!("Setting G-code file: {:?}", abs_path);
         match file::GCodeFile::new(&abs_path) {
 
             Ok(f) => {

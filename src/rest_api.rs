@@ -187,12 +187,14 @@ async fn upload_gcode(data: Data<'_>, filename: String, data_dir: &State<DataDir
     full_path.push(filename);
     
     if std::path::Path::exists(full_path.as_path()) {
+        log::warn!("File already exists: {:?}", full_path);
         return Err(ApiError::from(Error::new(std::io::ErrorKind::AlreadyExists, format!("file already exists @ {:?}", full_path))));
     }
     let stream = data.open(size_limit);
     let file = stream.into_file(full_path.as_path()).await?;
     
     if !file.is_complete() {
+        log::error!("Failed to write entire file: {:?}", full_path);
         return Err(ApiError::from(Error::new(std::io::ErrorKind::BrokenPipe, "Unable to write entire file")));
     }
     
@@ -219,6 +221,7 @@ fn list_gcode(data_dir: &State<DataDir>) -> Json<FileList> {
         last_modified_secs_since_epoch: file.last_modified_since_epoch.as_secs()}
     }).collect();
 
+    log::info!("Listing G-code files: {:?}", api_files);
     return Json(FileList{files:api_files});
 }
 
