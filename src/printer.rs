@@ -150,34 +150,6 @@ impl ExternalConsole {
     }
 }
 
-macro_rules! send_series_of_cmds_read_until_response {
-    // The pattern for a single `eval`
-    ($s:ident, $($e:expr),+) => {
-        {
-            trait SendSingleCmd {
-                fn send_cmd(&self, printer: &mut Printer) -> std::io::Result<()>;
-            }
-            impl SendSingleCmd for String {
-                fn send_cmd(&self, printer: &mut Printer) -> std::io::Result<()> {
-                    printer.send_cmd_read_until_response(self.as_str(), None)
-                }
-            }
-            trait SendMultipleCmds {
-                fn send_cmd(&self, printer: &mut Printer) -> std::io::Result<()>;
-            }
-            impl SendMultipleCmds for Vec<String> {
-                fn send_cmd(&self, printer: &mut Printer) -> std::io::Result<()> {
-                    printer.send_cmds_read_until_response(&self, None)
-                }
-            }
-
-            $(
-                ($e).send_cmd($s)?;
-            )*
-        }
-    };
-}
-
 #[derive(Default, Debug, Clone)]
 struct PositionData {
     current: Position,
@@ -311,11 +283,11 @@ impl PrinterControl for Printer {
         }
 
         if self.state == PrintState::PAUSED {
-            send_series_of_cmds_read_until_response!(self,
-                self.protocol.get_set_position_mode(&PositionMode::ABSOLUTE, &PositionMode::ABSOLUTE), 
-                self.protocol.get_move_cmds(&self.position.saved, false),
-                self.protocol.get_recover_extruder_cmd(),
-                self.protocol.get_set_position_mode(&self.position.move_mode_xyz_e.0, &self.position.move_mode_xyz_e.1));
+            let mut cmds = self.protocol.get_set_position_mode(&PositionMode::ABSOLUTE, &PositionMode::ABSOLUTE);
+            cmds.extend(self.protocol.get_move_cmds(&self.position.saved, false));
+            cmds.push(self.protocol.get_recover_extruder_cmd());
+            cmds.extend(self.protocol.get_set_position_mode(&self.position.move_mode_xyz_e.0, &self.position.move_mode_xyz_e.1));
+            self.send_cmds_read_until_response(&cmds)?;
         }
         
         self.transition_state(PrintState::STARTED);
@@ -328,12 +300,10 @@ impl PrinterControl for Printer {
         }
 
         if self.is_busy {
-            send_series_of_cmds_read_until_response!(self, self.protocol.get_stop_cmd(false));
+            self.send_cmds_read_until_response(&[self.protocol.get_stop_cmd(false)])?;
         }
 
-        send_series_of_cmds_read_until_response!(self,
-            self.protocol.get_fan_speed_cmd(0, 0.)
-        );
+        self.send_cmds_read_until_response(&[self.protocol.get_fan_speed_cmd(0, 0.)])?;
 
         let res = self.disable_all_heaters();
 
@@ -351,10 +321,10 @@ impl PrinterControl for Printer {
         }
         self.print_timer.update();
         
-        send_series_of_cmds_read_until_response!(self,
-            self.protocol.get_report_position_cmd(), 
+        self.send_cmds_read_until_response(&[
+            self.protocol.get_report_position_cmd(),
             self.protocol.get_retract_extruder_cmd()
-        );
+        ])?;
 
         self.transition_state(PrintState::PAUSED);
         Ok(())
@@ -397,11 +367,10 @@ impl PrinterControl for Printer {
 
         info!("Set position to {:?}", new_pos);
 
-        send_series_of_cmds_read_until_response!(self,
-            self.protocol.get_set_position_mode(&PositionMode::RELATIVE, &PositionMode::RELATIVE),
-            self.protocol.get_move_cmds(new_pos, true),
-            self.protocol.get_set_position_mode(&self.position.move_mode_xyz_e.0, &self.position.move_mode_xyz_e.1)
-        );
+        let mut cmds = self.protocol.get_set_position_mode(&PositionMode::RELATIVE, &PositionMode::RELATIVE);
+        cmds.extend(self.protocol.get_move_cmds(new_pos, true));
+        cmds.extend(self.protocol.get_set_position_mode(&self.position.move_mode_xyz_e.0, &self.position.move_mode_xyz_e.1));
+        self.send_cmds_read_until_response(&cmds)?;
 
         Ok(())
     }
@@ -537,7 +506,7 @@ impl Printer {
             return Ok(());
         }
 
-        self.send_cmd_read_until_response(&cmd, Some(next_line_no))
+        self.send_cmds_read_until_response_with_line_numbers(&[cmd], next_line_no)
         
     }
 
@@ -684,14 +653,16 @@ impl Printer {
         Ok(())
     }
 
-    fn send_cmds_read_until_response(&mut self, cmds: &Vec<String>, line_no: Option<u32>) -> std::io::Result<()> {
-        let mut cur_line_no = line_no;
+    fn send_cmds_read_until_response(&mut self, cmds: &[String]) -> std::io::Result<()> {
         for cmd in cmds {
-            self.send_cmd_read_until_response(cmd, line_no)?;
+            self.send_cmd_read_until_response(cmd, None)?;
+        }
+        Ok(())
+    }
 
-            if cur_line_no.is_some() {
-                cur_line_no = cur_line_no.map(|v| v+1);
-            }
+    fn send_cmds_read_until_response_with_line_numbers(&mut self, cmds: &[String], line_no: u32) -> std::io::Result<()> {
+        for (i, cmd) in cmds.iter().enumerate() {
+            self.send_cmd_read_until_response(cmd, Some(line_no + i as u32))?;
         }
         Ok(())
     }
@@ -705,7 +676,7 @@ impl Printer {
             self.protocol.get_set_temperature_cmds(&TemperatureTarget { to_set: t.measured_from, index: Some(t.index), target: 0. })
         }).flatten().collect::<Vec<String>>();
 
-        send_series_of_cmds_read_until_response!(self, cmds);
+        self.send_cmds_read_until_response(&cmds)?;
         Ok(())
     }
 

@@ -120,13 +120,21 @@ fn handle_incoming_cmd(printer: &mut Option<Box<dyn PrinterControl>>, cmd: &inte
     }
 }
 
-fn init_base_dir() -> std::io::Result<PathBuf> {
-    let mut base_dir : PathBuf = match dirs::home_dir() {
-        Some(home) => {home}
-        None => {return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Cannot find home directory for user"));}
-    };
+fn init_base_dir(base_dir_arg: Option<PathBuf>) -> std::io::Result<PathBuf> {
     
-    base_dir.push(".yoctoprint");
+    let base_dir : PathBuf = match base_dir_arg {
+        Some(dir) => dir,
+        None => {
+            let mut home = match dirs::home_dir() {
+                Some(home) => {home}
+                None => {return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Cannot find home directory for user"));}
+            };
+            home.push(".yoctoprint");
+            home
+        }
+    };
+
+    info!("Ensuring base directory at {base_dir:?} exits");
     match std::fs::create_dir(&base_dir) {
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {Ok(base_dir)}
         Err(e) => {Err(e)}
@@ -137,6 +145,7 @@ fn init_base_dir() -> std::io::Result<PathBuf> {
 fn init_gcode_dir(base_dir: &PathBuf) -> std::io::Result<PathBuf> {
     let mut gcode_dir = base_dir.clone();
     gcode_dir.push(file::GCODE_DIR);
+    log::info!("Initializing GCODE directory at {:?}", gcode_dir);
     match std::fs::create_dir(&gcode_dir) {
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {Ok(gcode_dir)}
         Err(e) => {Err(e)}
@@ -157,6 +166,10 @@ struct Args {
     // Log level
     #[arg(short, long, default_value="info")]
     log_level: String,
+
+    /// Base directory for application data (defaults to ~/.yoctoprint)
+    #[arg(long)]
+    base_dir: Option<PathBuf>,
 }
 
 fn main() {
@@ -177,7 +190,7 @@ fn main() {
     simple_logger::init_with_level(log_level).unwrap();
     info!("Yoctoprint starting!");
 
-    let base_dir = init_base_dir().unwrap();
+    let base_dir = init_base_dir(args.base_dir).unwrap();
    
     init_gcode_dir(&base_dir).unwrap();
 
