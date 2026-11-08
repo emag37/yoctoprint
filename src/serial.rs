@@ -1,4 +1,3 @@
-extern crate lazy_static;
 use regex::Regex;
 use serialport::SerialPort;
 use std::io::*;

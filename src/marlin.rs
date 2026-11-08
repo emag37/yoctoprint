@@ -1,6 +1,6 @@
-extern crate lazy_static;
 use enumset::enum_set;
 use regex::Regex;
+use std::sync::LazyLock;
 
 use crate::internal_api;
 use crate::serial::*;
@@ -9,16 +9,14 @@ use std::io::*;
 use enumset::EnumSet;
 
 
-lazy_static! {
-    // Matches T:22.81 /0.00. Current in group 1, target in group 2
-    static ref TEMP_DEG_REGEX: Regex = Regex::new(r"[TBCPLR][0-9]?:([0-9]+\.[0-9]+) +/([0-9]+\.[0-9]+)").unwrap();
-    // Matches @:0
-    static ref HEATER_POWER_REGEX: Regex = Regex::new(r"([BC]?@[0-9]?):([0-9]+)").unwrap();
-    static ref RESIDENCY_REGEX: Regex = Regex::new(r"W:([\?0-9][0-9]*)").unwrap();
-    static ref RX_POSITION_REGEX: Regex = Regex::new(r"([XYZE]):(-?[0-9]+\.?[0-9]*)").unwrap();
-    static ref TX_POSITION_REGEX: Regex = Regex::new(r"([XYZE])(-?[0-9]+\.?[0-9]*)").unwrap();
-    static ref LAST_LINE_REGEX: Regex = Regex::new(r"Last Line: ?([0-9]+)").unwrap();
-}
+// Matches T:22.81 /0.00. Current in group 1, target in group 2
+static TEMP_DEG_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[TBCPLR][0-9]?:([0-9]+\.[0-9]+) +/([0-9]+\.[0-9]+)").unwrap());
+// Matches @:0
+static HEATER_POWER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([BC]?@[0-9]?):([0-9]+)").unwrap());
+static RESIDENCY_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"W:([\?0-9][0-9]*)").unwrap());
+static RX_POSITION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([XYZE]):(-?[0-9]+\.?[0-9]*)").unwrap());
+static TX_POSITION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([XYZE])(-?[0-9]+\.?[0-9]*)").unwrap());
+static LAST_LINE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Last Line: ?([0-9]+)").unwrap());
 
 
 

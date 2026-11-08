@@ -3,7 +3,6 @@ use log::{info, error, warn};
 use std::io::ErrorKind;
 use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
-#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate rocket;
 use clap::Parser;
 
