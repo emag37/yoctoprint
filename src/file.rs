@@ -83,13 +83,15 @@ struct PrintDurationEstimator2 {
 }
 
 impl PrintDurationEstimator2 {
-    pub fn new<R: Read>(file_lines: BufReader<R>) -> Self {
+    pub fn new<R: Read>(file_lines: BufReader<R>) -> (Self, u32) {
         let mut total_time = None;
         let mut curr_layer_duration = LayerDuration::default();
-        
+        let mut line_count = 0;
+
         let mut layer_duration_list: Vec<LayerDuration> = Vec::new();
 
         for (line_no, line) in file_lines.lines().enumerate() {
+            line_count = line_no as u32 + 1;
             match line {
                 Ok(line_str) => {
                     if line_str.starts_with(LAYER) {
@@ -123,7 +125,7 @@ impl PrintDurationEstimator2 {
         }
 
         let first_layer_duration = layer_duration_list.first().cloned().unwrap_or_default();
-        return Self {layer_durations: layer_duration_list, total_time: total_time.unwrap_or(Duration::from_hours(666)), remaining_time: Duration::from_hours(666), curr_layer: first_layer_duration, curr_layer_entered_at: Duration::ZERO, error: 1.0};
+        (Self {layer_durations: layer_duration_list, total_time: total_time.unwrap_or(Duration::from_hours(666)), remaining_time: Duration::from_hours(666), curr_layer: first_layer_duration, curr_layer_entered_at: Duration::ZERO, error: 1.0}, line_count)
     }
     
     pub fn get_remaining_time(&self) -> Duration {
@@ -244,11 +246,11 @@ impl GCodeFile {
             Ok(mut f) => {
                 let reader = BufReader::new(&f);
 
-                let estimator = PrintDurationEstimator2::new(reader);
+                let (estimator, line_count) = PrintDurationEstimator2::new(reader);
 
                 let _ = f.rewind();
                 let reader = BufReader::new(f);
-                let ret_file = GCodeFile{line_count:0 as u32, 
+                let ret_file = GCodeFile{line_count, 
                     cur_line_in_file: 0, file: reader, 
                     path:gcode_file.to_path_buf(), 
                     last_line: String::new(), 
@@ -414,6 +416,7 @@ mod tests {
     fn estimator_real_file() {
         simple_logger::init_with_level(log::Level::Debug).unwrap();
         let mut file = GCodeFile::new(&std::env::current_dir().unwrap().join(Path::new("samples/PSME_cane-clip-2.gcode"))).expect("Cannot open sample file!");
+        assert_eq!(file.line_count, 225217);
 
         let time_per_line = Duration::from_secs_f64(7860.0 / 225217.0);
         let mut cur_t = Duration::ZERO;

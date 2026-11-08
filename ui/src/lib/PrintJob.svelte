@@ -92,7 +92,7 @@
         <div class="current_file">{current_gcode}</div>
 
         {#if gcode_loaded}
-            <progress class="progress_bar" value={lines_done / lines_total}></progress>
+            <progress class="progress_bar" value={lines_total > 0 ? lines_done / lines_total : 0}></progress>
 
             <div class="time_remaining">{lowerCase($status.state)}, ETA: {time_remaining} {#if time_elapsed != null}, Elapsed: {time_elapsed}{/if}</div>
             {#if $status.state == "CONNECTED" || $status.state == "PAUSED" || $status.state == "DONE" || $status.state == "STARTED"}

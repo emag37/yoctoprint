@@ -205,6 +205,10 @@ impl SerialProtocol for Marlin {
             return Ok(Response::NACK(capture.get(1).unwrap().as_str().parse::<u32>().unwrap() + 1));
         } else if trimmed_line.starts_with("Resend: ") { // Ignore Resend, we'll use the line number in the previous line
             return Ok(Response::NONE);
+        } else if HEATER_POWER_REGEX.is_match(trimmed_line) {
+            // Some Marlin firmware splits the heater power portion of a temperature
+            // report onto its own line. There's nothing to update for that fragment.
+            return Ok(Response::NONE);
         }
 
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unknown rx line: {}", line)));
@@ -372,6 +376,15 @@ mod tests {
         let test_line = "T:22.67 /66.66 @:55";
         let resp = Marlin{}.parse_rx_line(test_line);
         assert_eq!(resp.unwrap(), Response::TEMPERATURE(vec![Temperature{measured_from:ProbePoint::HOTEND, index:0, power:(55./127.), current:22.67, target:66.66}], None));
+    }
+
+    #[test]
+    fn parse_split_temperature_power_line() {
+        let resp = Marlin{}.parse_rx_line(" @:0 B@:0\n");
+        assert_eq!(resp.unwrap(), Response::NONE);
+
+        let resp = Marlin{}.parse_rx_line(" B:21.44 /0.00 @:0 B@:0\n");
+        assert_eq!(resp.unwrap(), Response::NONE);
     }
 
     #[test]

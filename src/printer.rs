@@ -170,16 +170,18 @@ pub struct Printer {
     print_timer: PrintTimer,
     fan_speeds: Vec<f64>,
     external_console: ExternalConsole,
-    consecutive_errors: u32
+    consecutive_errors: u32,
+    rx_partial_line: String
 }
 
 impl PrinterControl for Printer {
     fn read_from_printer(&mut self) -> std::io::Result<Response>{
-        let mut read_str: String = String::new();
+        let mut read_str = std::mem::take(&mut self.rx_partial_line);
 
         match self.comms.port.read_line(&mut read_str) {
             Ok(n_read) => {
                 if n_read == 0 { 
+                    self.rx_partial_line = read_str;
                     return Ok(Response::NONE);
                 }
                 
@@ -187,6 +189,7 @@ impl PrinterControl for Printer {
                 return self.protocol.parse_rx_line(&read_str);
             } Err(e) => {
                 if e.kind() == std::io::ErrorKind::TimedOut {
+                    self.rx_partial_line = read_str;
                     return Ok(Response::NONE);
                 }
                 error!("Got error reading from serial port {} after", e);
@@ -464,7 +467,7 @@ impl Printer {
                 homed_axes:EnumSet::new(), temperatures: Vec::new(), position: PositionData::default(),
                 is_busy: false,
                 print_timer: PrintTimer::new(),
-                fan_speeds: vec![0.], external_console: ExternalConsole::new(), consecutive_errors: 0};
+                fan_speeds: vec![0.], external_console: ExternalConsole::new(), consecutive_errors: 0, rx_partial_line: String::new()};
 
                 for cmd in ret_printer.protocol.get_enable_temperature_updates_cmds(std::time::Duration::from_secs(2)) {
                     if let Err(e) = ret_printer.send_cmd_read_until_response(cmd.as_str(), None) {
@@ -528,6 +531,10 @@ impl Printer {
                     }
                 }
                 Err(e) => {
+                    if e.kind() == std::io::ErrorKind::InvalidData {
+                        warn!("Ignoring unparseable line. {}", e);
+                        continue;
+                    }
                     return Err(e);
                 }
             }

@@ -33,8 +33,20 @@
         });
     }
 
+    function handlePageShow(event) {
+        // Refresh when the page is restored from the browser's back/forward cache.
+        if (event.persisted) {
+            refreshFileList();
+        }
+    }
+
     onMount(()=>{
         refreshFileList();
+        window.addEventListener('pageshow', handlePageShow);
+
+        return () => {
+            window.removeEventListener('pageshow', handlePageShow);
+        };
     })
 
     function deleteFile(filename) {
