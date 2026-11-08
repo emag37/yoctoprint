@@ -140,6 +140,7 @@ impl Default for PrinterStatus {
 
 pub enum PrinterCommand {
     Connect(PathBuf, u32),
+    #[allow(dead_code)]
     Disconnect,
     SetGcodeFile(PathBuf),
     DeleteGcodeFile(PathBuf),

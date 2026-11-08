@@ -5,7 +5,7 @@ use std::vec::Vec;
 use std::path::{Path,PathBuf};
 use std::fs::{File};
 use log::{debug, info};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::time::Duration;
 
 use crate::internal_api::{self, FileInfo};
@@ -125,7 +125,8 @@ impl PrintDurationEstimator2 {
         }
 
         let first_layer_duration = layer_duration_list.first().cloned().unwrap_or_default();
-        (Self {layer_durations: layer_duration_list, total_time: total_time.unwrap_or(Duration::from_hours(666)), remaining_time: Duration::from_hours(666), curr_layer: first_layer_duration, curr_layer_entered_at: Duration::ZERO, error: 1.0}, line_count)
+        let total_time = total_time.unwrap_or_default();
+        (Self {layer_durations: layer_duration_list, total_time, remaining_time: total_time, curr_layer: first_layer_duration, curr_layer_entered_at: Duration::ZERO, error: 1.0}, line_count)
     }
     
     pub fn get_remaining_time(&self) -> Duration {
@@ -165,11 +166,13 @@ impl PrintDurationEstimator2 {
         }).unwrap_or((0, Duration::ZERO))
     }
 }
+#[allow(dead_code)]
 struct PrintDurationEstimator {
     line_no_elapsed: std::vec::Vec<(u32, Duration)>,
     this_line_no_elapsed_idx: RefCell<usize>
 }
 
+#[allow(dead_code)]
 impl PrintDurationEstimator{
     pub fn new() -> Self {
         return PrintDurationEstimator {line_no_elapsed:std::vec::Vec::new(), this_line_no_elapsed_idx: RefCell::new(0)};
@@ -417,6 +420,9 @@ mod tests {
         simple_logger::init_with_level(log::Level::Debug).unwrap();
         let mut file = GCodeFile::new(&std::env::current_dir().unwrap().join(Path::new("samples/PSME_cane-clip-2.gcode"))).expect("Cannot open sample file!");
         assert_eq!(file.line_count, 225217);
+
+        let initial_remaining = file.get_remaining_time().unwrap();
+        assert_approx_eq!(initial_remaining.as_secs_f64(), 7860., EPSILON);
 
         let time_per_line = Duration::from_secs_f64(7860.0 / 225217.0);
         let mut cur_t = Duration::ZERO;

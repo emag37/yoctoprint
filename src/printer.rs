@@ -30,6 +30,7 @@ pub trait PrinterControl {
     fn send_to_printer(&mut self, data: &str) -> std::io::Result<usize>;
     fn next_action(&mut self) -> Result<()>;
     fn get_status(&self) -> Result<internal_api::PrinterStatus>;
+    #[allow(dead_code)]
     fn get_state(&self) -> PrintState;
     fn set_gcode_file(&mut self, abs_path: &PathBuf) -> Result<()>;
     fn clear_gcode_file(&mut self) -> Result<()>;

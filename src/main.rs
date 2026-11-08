@@ -1,7 +1,6 @@
 use std::path::{PathBuf};
-use log::{debug, info, error, warn};
+use log::{info, error, warn};
 use std::io::ErrorKind;
-use std::fs::File;
 use crate::printer::{Printer, SimulatedPrinter, PrinterControl};
 use crate::internal_api::*;
 #[macro_use] extern crate lazy_static;
