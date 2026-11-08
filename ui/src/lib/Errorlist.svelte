@@ -34,11 +34,11 @@
 </script>
 
 
-<li class="float">
+<ul class="float">
     {#each $errorList as error}
     <li transition:fly={{ delay: 0, duration: 300, x: 200, y: 0., opacity: 0.5, easing: quintOut }} class="item">{error.msg}</li>
     {/each}
-</li>
+</ul>
 
 <style>
 .float {

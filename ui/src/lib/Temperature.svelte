@@ -26,13 +26,13 @@ onDestroy(unsubscribe);
     <div class="readout">
         <div class="probe">{temperature.measured_from +  " " + temperature.index}</div>
         <div class="sensor">
-                <meter id="current_temp" class="meter" value={temperature.current} min="0" max="300" optimum={temperature.target} low={temperature.target_low} high={temperature.target_high}/>
+                <meter id="current_temp" class="meter" value={temperature.current} min="0" max="300" optimum={temperature.target} low={temperature.target_low} high={temperature.target_high}></meter>
                 <label class="digital" for="current_temp">Current: {temperature.current}ºC</label>
 
-                <meter id="target_temp" class="meter" value={temperature.target} min="0" max="300" low="75" high="220"/>
+                <meter id="target_temp" class="meter" value={temperature.target} min="0" max="300" low="75" high="220"></meter>
                 <label class="digital" for="current_temp">Target: {temperature.target}ºC</label>
                 
-                <meter id="power" class="meter" value={temperature.power} min="0" max="100"/>
+                <meter id="power" class="meter" value={temperature.power} min="0" max="100"></meter>
                 <label class="digital" for="power">Power: {temperature.power}%</label>
         </div>
     </div>

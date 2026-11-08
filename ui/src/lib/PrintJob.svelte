@@ -117,7 +117,7 @@
                 }}>  <img src={pauseIcon} width="50" height="50" alt="Stop"/>
                 </button>
                 {#if $status.state == "DONE"}
-                    <img style="animation-play-state: {bananaAnimRunning ? "running" : "paused"}" class="banana_man" src={bananaManGif}/>
+                    <img style="animation-play-state: {bananaAnimRunning ? "running" : "paused"}" class="banana_man" src={bananaManGif} alt="Banana man"/>
                 {/if}
             {/if}
         {/if}

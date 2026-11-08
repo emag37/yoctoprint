@@ -20,16 +20,20 @@
 
 <div style="height: 400px">
 <table class="nicetable">
-    <tr>
-        <th>Property</th>
-        <th>Value</th>
-    </tr>
-    {#each values as value}
+    <thead>
         <tr>
-            <td>{value[0]}</td>
-            <td>{value[1]}</td>
+            <th>Property</th>
+            <th>Value</th>
         </tr>
-    {/each}
+    </thead>
+    <tbody>
+        {#each values as value}
+            <tr>
+                <td>{value[0]}</td>
+                <td>{value[1]}</td>
+            </tr>
+        {/each}
+    </tbody>
 </table>
 </div>
 
@@ -67,19 +71,5 @@ table.nicetable thead th {
 }
 table.nicetable thead th:first-child {
   border-left: none;
-}
-
-table.nicetable tfoot td {
-  font-size: 13px;
-}
-table.nicetable tfoot .links {
-  text-align: right;
-}
-table.nicetable tfoot .links a{
-  display: inline-block;
-  background: #FFFFFF;
-  color: #398AA4;
-  padding: 2px 8px;
-  border-radius: 5px;
 }
 </style>
